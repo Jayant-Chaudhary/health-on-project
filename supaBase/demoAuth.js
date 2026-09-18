@@ -4,7 +4,7 @@ async function runDemo() {
   console.log('--- Maternal Health Platform Auth Script Demo ---');
   
   const testUser = {
-    email: `patient_test_${Date.now()}@example.com`,
+    email: `patient_test_${Date.now()}@gmail.com`,
     password: 'SecurePassword123!',
     fullName: 'Jane Doe',
     role: 'patient',
