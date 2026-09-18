@@ -1,0 +1,14 @@
+{
+  "name": "maternal-health-supabase-auth",
+  "version": "1.0.0",
+  "description": "Supabase Authentication (Signup, Login, Logout) JavaScript module and demo script",
+  "main": "auth.js",
+  "type": "module",
+  "scripts": {
+    "demo": "node demoAuth.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.0",
+    "dotenv": "^16.4.5"
+  }
+}
