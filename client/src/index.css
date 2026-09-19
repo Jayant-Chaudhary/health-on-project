@@ -1,0 +1,54 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-canvas font-sans text-body-md text-ink antialiased;
+  }
+
+  /* Vitals and lab figures must not jump while scanning a column. */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+
+  :focus-visible {
+    @apply outline-none ring-2 ring-cypress/30;
+  }
+}
+
+@layer components {
+  .card {
+    @apply rounded-2xl border border-line bg-surface shadow-card;
+  }
+
+  .pill {
+    @apply inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-label-sm uppercase;
+  }
+
+  .field {
+    @apply w-full rounded-xl border border-line bg-raised px-3 text-body-md text-ink
+           placeholder:text-ink-3 focus:border-cypress focus:shadow-focus focus:outline-none;
+  }
+
+  /* Slim, warm scrollbars for the two independently scrolling columns. */
+  .scroll-column {
+    @apply overflow-y-auto overscroll-contain;
+    scrollbar-width: thin;
+    scrollbar-color: #DECFC1 transparent;
+  }
+
+  .scroll-column::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  .scroll-column::-webkit-scrollbar-thumb {
+    @apply rounded-full bg-line-strong;
+  }
+}
