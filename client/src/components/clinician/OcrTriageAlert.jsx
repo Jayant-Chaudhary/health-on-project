@@ -1,0 +1,100 @@
+import { useState } from 'react';
+import { Icon } from '../common/Icon.jsx';
+import { Button } from '../common/Button.jsx';
+import { formatDate } from '../../utils/format.js';
+
+/**
+ * Human-in-the-loop OCR review.
+ *
+ * Lists values the pipeline could not parse confidently and lets the clinician
+ * type the correct reading in place — the one manual step that keeps a bad
+ * scan from silently becoming a missing data point.
+ */
+export function OcrTriageAlert({ alerts = [], onResolve }) {
+  if (alerts.length === 0) return null;
+
+  return (
+    <section className="rounded-2xl border border-terracotta-border bg-terracotta-surface p-4">
+      <div className="flex items-start gap-3">
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-terracotta text-white">
+          <Icon name="scan" size={16} />
+        </span>
+        <div className="min-w-0 flex-1">
+          <h2 className="font-display text-label-lg text-terracotta">
+            {alerts.length} value{alerts.length > 1 ? 's' : ''} need{alerts.length > 1 ? '' : 's'} manual review
+          </h2>
+          <p className="text-body-sm text-terracotta-deep">
+            The OCR engine flagged these as low-confidence. Enter the reading from the scan to resolve.
+          </p>
+
+          <ul className="mt-3 space-y-2">
+            {alerts.map((alert) => (
+              <AlertItem key={alert.id} alert={alert} onResolve={onResolve} />
+            ))}
+          </ul>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function AlertItem({ alert, onResolve }) {
+  const [value, setValue] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  async function submit(event) {
+    event.preventDefault();
+    if (!value.trim()) return;
+    setSaving(true);
+    try {
+      await onResolve?.(alert, value.trim());
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <li className="rounded-xl border border-terracotta-border bg-surface p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="font-display text-label-lg text-ink">{alert.label}</p>
+        {alert.confidence != null && (
+          <span className="rounded-full bg-terracotta-surface px-2 py-0.5 text-label-sm tabular text-terracotta">
+            {Math.round(alert.confidence * 100)}% confidence
+          </span>
+        )}
+      </div>
+      <p className="mt-0.5 text-body-sm text-ink-3">
+        {alert.reportName} · {formatDate(alert.reportDate)}
+      </p>
+      <p className="mt-1 text-body-sm text-ink-2">{alert.reason}</p>
+
+      <form onSubmit={submit} className="mt-2.5 flex items-center gap-2">
+        <label className="sr-only" htmlFor={`ocr-${alert.id}`}>
+          Corrected value for {alert.label}
+        </label>
+        <input
+          id={`ocr-${alert.id}`}
+          value={value}
+          onChange={(event) => setValue(event.target.value)}
+          placeholder="Enter value from scan"
+          className="field h-9 flex-1"
+        />
+        {alert.imageUrl && (
+          <a
+            href={alert.imageUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="shrink-0 rounded-xl border border-line px-3 py-2 text-label-md text-cypress hover:bg-subcanvas"
+          >
+            View scan
+          </a>
+        )}
+        <Button type="submit" size="sm" disabled={saving || !value.trim()}>
+          {saving ? 'Saving…' : 'Resolve'}
+        </Button>
+      </form>
+    </li>
+  );
+}
+
+export default OcrTriageAlert;
