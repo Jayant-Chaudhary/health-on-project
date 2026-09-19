@@ -1,0 +1,6 @@
+# Python artifacts from this pipeline, scoped so the repo root stays untouched.
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
