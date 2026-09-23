@@ -5,8 +5,7 @@ import { Spinner } from '../components/common/Spinner.jsx';
 /**
  * Role-guarded route wrapper.
  *
- * Not applied to the dashboard route yet — Supabase auth is wired but the
- * milestone demo runs without a session. Wrap a route with this once invites
+ * Not applied to the dashboard route yet. Wrap a route with this once invites
  * are issuing real sessions.
  */
 export function ProtectedRoute({ role, children }) {

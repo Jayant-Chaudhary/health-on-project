@@ -1,24 +1,17 @@
-import { request, withFallback } from './apiClient.js';
-import { mockDashboard, mockPatients } from '../data/mockDashboard.js';
-
-const clone = (value) => JSON.parse(JSON.stringify(value));
+import { request } from './apiClient.js';
 
 /** Patients in the clinician's queue, for the sidebar and search. */
 export async function fetchPatients() {
-  return withFallback(
-    async () => {
-      const appointments = await request('/appointments');
-      return appointments.map((appointment) => ({
-        id: appointment.patient_id,
-        name: appointment.patient?.full_name ?? 'Unknown patient',
-        mrn: appointment.patient?.mrn ?? '',
-        gestationalDays: appointment.patient?.gestational_days ?? null,
-        acuity: appointment.acuity ?? 'optimal',
-        appointmentId: appointment.id,
-      }));
-    },
-    () => clone(mockPatients)
-  );
+  const appointments = await request('/appointments');
+
+  return appointments.map((appointment) => ({
+    id: appointment.patient_id,
+    name: appointment.patient?.full_name ?? 'Unknown patient',
+    mrn: appointment.patient?.mrn ?? '',
+    gestationalDays: appointment.patient?.gestational_days ?? null,
+    acuity: appointment.acuity ?? 'optimal',
+    appointmentId: appointment.id,
+  }));
 }
 
 /**
@@ -27,91 +20,69 @@ export async function fetchPatients() {
  * components consume.
  */
 export async function fetchPatientDashboard(patientId, appointmentId) {
-  return withFallback(
-    async () => {
-      const [appointment, responses, reports, checklist, postVisit] = await Promise.all([
-        request(`/appointments/${appointmentId}`),
-        request(`/questionnaire/responses/${appointmentId}`),
-        request(`/lab-reports?patientId=${patientId}`),
-        request(`/checklist/${appointmentId}`),
-        request(`/post-visit/${appointmentId}`),
-      ]);
+  const [appointment, responses, reports, checklist, postVisit] = await Promise.all([
+    request(`/appointments/${appointmentId}`),
+    request(`/questionnaire/responses/${appointmentId}`),
+    request(`/lab-reports?patientId=${patientId}`),
+    request(`/checklist/${appointmentId}`),
+    request(`/post-visit/${appointmentId}`),
+  ]);
 
-      return {
-        patient: appointment.patient,
-        appointment,
-        questionnaire: {
-          submittedAt: responses[0]?.created_at ?? null,
-          answers: responses.map((response) => ({
-            id: response.id,
-            question: response.template?.question_text ?? '',
-            shortLabel: response.template?.short_label ?? response.template?.question_text ?? '',
-            answer: response.answer,
-            isRedFlagTrigger: response.template?.is_red_flag_trigger ?? false,
-            detail: response.detail ?? '',
-          })),
-        },
-        metrics: buildMetrics(reports),
-        triageAlerts: buildTriageAlerts(reports),
-        notes: { text: postVisit?.notes?.notes_text ?? '', updatedAt: postVisit?.notes?.updated_at ?? null },
-        checklist: (checklist ?? []).map((item) => ({
-          id: item.id,
-          label: item.label,
-          category: item.category ?? null,
-          isCompleted: item.is_completed,
-        })),
-        notifications: [],
-      };
+  return {
+    patient: appointment.patient,
+    appointment,
+    questionnaire: {
+      submittedAt: responses[0]?.created_at ?? null,
+      answers: responses.map((response) => ({
+        id: response.id,
+        question: response.template?.question_text ?? '',
+        shortLabel: response.template?.short_label ?? response.template?.question_text ?? '',
+        answer: response.answer,
+        isRedFlagTrigger: response.template?.is_red_flag_trigger ?? false,
+        detail: response.detail ?? '',
+      })),
     },
-    () => clone(mockDashboard)
-  );
+    metrics: buildMetrics(reports),
+    triageAlerts: buildTriageAlerts(reports),
+    notes: { text: postVisit?.notes?.notes_text ?? '', updatedAt: postVisit?.notes?.updated_at ?? null },
+    checklist: (checklist ?? []).map((item) => ({
+      id: item.id,
+      label: item.label,
+      category: item.category ?? null,
+      isCompleted: item.is_completed,
+    })),
+    notifications: [],
+  };
 }
 
 /** Historical series for one metric, for the expanded row chart. */
 export async function fetchMetricTrend(standardKey, patientId) {
-  return withFallback(
-    async () => {
-      const rows = await request(`/lab-reports/trend/${standardKey}?patientId=${patientId}`);
-      return rows.map((row) => ({
-        date: row.created_at,
-        value: Number(row.reviewed_value ?? row.parsed_value),
-      }));
-    },
-    () => clone(mockDashboard.metrics.find((m) => m.standardKey === standardKey)?.history ?? [])
-  );
+  const rows = await request(`/lab-reports/trend/${standardKey}?patientId=${patientId}`);
+
+  return rows.map((row) => ({
+    date: row.created_at,
+    value: Number(row.reviewed_value ?? row.parsed_value),
+  }));
 }
 
 export async function saveConsultancyNotes(appointmentId, notesText) {
-  return withFallback(
-    () => request(`/post-visit/${appointmentId}/notes`, { method: 'PUT', body: { notesText } }),
-    () => ({ notes_text: notesText, updated_at: new Date().toISOString() })
-  );
+  return request(`/post-visit/${appointmentId}/notes`, { method: 'PUT', body: { notesText } });
 }
 
 export async function toggleChecklistItem(itemId, isCompleted) {
-  return withFallback(
-    () => request(`/checklist/items/${itemId}`, { method: 'PATCH', body: { isCompleted } }),
-    () => ({ id: itemId, is_completed: isCompleted })
-  );
+  return request(`/checklist/items/${itemId}`, { method: 'PATCH', body: { isCompleted } });
 }
 
 export async function addActionItem(appointmentId, label) {
-  return withFallback(
-    () => request(`/post-visit/${appointmentId}/action-items`, { method: 'POST', body: { label } }),
-    () => ({ id: `local-${Date.now()}`, label, is_completed: false })
-  );
+  return request(`/post-visit/${appointmentId}/action-items`, { method: 'POST', body: { label } });
 }
 
 /** Doctor types in a value the OCR pipeline could not read confidently. */
 export async function resolveTriageAlert(metricId, { standardKey, reviewedValue }) {
-  return withFallback(
-    () =>
-      request(`/lab-reports/metrics/${metricId}/review`, {
-        method: 'PATCH',
-        body: { standardKey, reviewedValue },
-      }),
-    () => ({ id: metricId, standard_key: standardKey, reviewed_value: reviewedValue, needs_review: false })
-  );
+  return request(`/lab-reports/metrics/${metricId}/review`, {
+    method: 'PATCH',
+    body: { standardKey, reviewedValue },
+  });
 }
 
 // ---------------------------------------------------------------------------

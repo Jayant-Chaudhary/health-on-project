@@ -2,13 +2,11 @@
 -- Maternal Health Platform — Seed Data
 -- ============================================================
 
--- Metric Dictionary initial entries
-insert into metric_dictionary (standard_key, display_name, category, unit_standard, aliases) values
-  ('hemoglobin', 'Hemoglobin', 'blood', 'g/dL', ARRAY['HB', 'HGB', 'Hb', 'haemoglobin']),
-  ('platelets', 'Platelet Count', 'blood', '10^3/µL', ARRAY['PLT', 'Platelets', 'Platelet Count']),
-  ('blood_glucose_fasting', 'Fasting Blood Sugar', 'metabolic', 'mg/dL', ARRAY['FBS', 'Fasting Glucose', 'Fasting Blood Sugar']),
-  ('blood_pressure_systolic', 'Systolic Blood Pressure', 'vitals', 'mmHg', ARRAY['BP Systolic', 'SBP', 'Systolic']),
-  ('blood_pressure_diastolic', 'Diastolic Blood Pressure', 'vitals', 'mmHg', ARRAY['BP Diastolic', 'DBP', 'Diastolic']);
+-- Metric Dictionary
+-- Not seeded here. It is reference data, not sample data, so it ships as a
+-- migration (20260923000000_expand_metric_dictionary.sql) and is already in
+-- place by the time this file runs — on a fresh database and an existing one
+-- alike. Add a lab's spelling there, not here.
 
 -- Pre-visit Questionnaire Templates (MVP yes/no questions)
 insert into questionnaire_templates (question_text, response_type, is_red_flag_trigger, sort_order) values
