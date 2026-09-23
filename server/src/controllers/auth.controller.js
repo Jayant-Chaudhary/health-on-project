@@ -114,6 +114,8 @@ async function signup(req, res, next) {
 
     if (role === 'patient') {
       await supabaseAdmin.from('patient_details').upsert({ profile_id: user.id });
+    } else if (role === 'clinician') {
+      await supabaseAdmin.from('clinician_details').upsert({ profile_id: user.id });
     }
 
     res.status(201).json({

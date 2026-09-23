@@ -58,6 +58,14 @@ Status = Literal["ok", "partial", "garbled", "scanned", "error"]
 # --------------------------------------------------------------------------
 @dataclass(frozen=True)
 class GarbleConfig:
+    """Thresholds and weights for garbled-text detection.
+
+    Each signal contributes `weight` to a penalty when it trips. A page is
+    called garbled when the total penalty reaches `garbled_at`. Weights encode
+    how conclusive a signal is: U+FFFD means a decode already failed and is
+    nearly proof on its own; vowel statistics are weak circumstantial evidence.
+    """
+
     replacement_max: float = 0.005
     pua_max: float = 0.05
     control_max: float = 0.01
@@ -73,9 +81,10 @@ class GarbleConfig:
     w_printable: float = 0.6
     w_alnum: float = 0.5
     w_word_len: float = 0.4
-    w_vowel: float = 0.2 
+    w_vowel: float = 0.2  # weak: trips on any non-Latin script
 
     garbled_at: float = 1.0
+    # Vowel statistics only mean anything for Latin-script text.
     vowel_requires_latin_ratio: float = 0.80
 
 
@@ -89,6 +98,7 @@ class ExtractConfig:
     dedupe_tolerance: float = 1.0
     sample_pages: int = 3
     repair: bool = True
+    # Fraction of content pages that must be garbled before the whole document is.
     doc_garbled_ratio: float = 0.5
 
 
@@ -111,6 +121,21 @@ class Token:
 # PyMuPDF backend
 # --------------------------------------------------------------------------
 class FitzBackend:
+    """Opens the document once and serves per-page words.
+
+    `fitz.open` parses the xref table and object tree, so calling it inside a
+    per-page loop makes the fallback path O(pages x document-parse).
+
+    Coordinates are normalized into pdfplumber's space:
+      * PyMuPDF reports words in *rotated* page space; pdfplumber ignores
+        /Rotate. `derotation_matrix` undoes that.
+      * PyMuPDF measures from the CropBox origin; pdfplumber's numbers are
+        absolute within the MediaBox. `cropbox_position` is exactly that offset.
+    Without this, tokens from the two backends live in different coordinate
+    systems and any downstream layout reconstruction is quietly wrong on
+    rotated or cropped pages.
+    """
+
     def __init__(self, path: str):
         self._doc = None
         if not HAS_FITZ:
@@ -193,6 +218,11 @@ def open_pdf_safe(pdf_path: str | Path, config: ExtractConfig = ExtractConfig())
 
 
 def is_digital(pdf, backend: FitzBackend | None, config: ExtractConfig) -> bool:
+    """True if a majority of sampled pages yield words from *any* backend.
+
+    Checking only pdfplumber means a file pdfplumber chokes on is misrouted to
+    OCR even when another backend reads it perfectly.
+    """
     pages = pdf.pages[: config.sample_pages]
     if not pages:
         return False
@@ -211,6 +241,7 @@ def is_digital(pdf, backend: FitzBackend | None, config: ExtractConfig) -> bool:
 # Extraction primitives
 # --------------------------------------------------------------------------
 def _supports_expand_ligatures() -> bool:
+    """Version strings like '0.11.4rc1' break naive int parsing."""
     try:
         from packaging.version import parse as _parse
         return _parse(pdfplumber.__version__) >= _parse("0.10")
@@ -229,6 +260,7 @@ def extract_words_pdfplumber(
     *,
     tight: bool = False,
 ) -> list[dict]:
+    """Extract words from a pdfplumber page. Returns [] on failure."""
     x_tol = config.tight_x_tol if tight else config.x_tol
     y_tol = config.tight_y_tol if tight else config.y_tol
     try:
@@ -275,6 +307,12 @@ def score_garbled(
     words: Sequence[dict],
     config: GarbleConfig = GarbleConfig(),
 ) -> GarbleReport:
+    """Score a word list for encoding-level corruption.
+
+    Only encoding signals contribute to the penalty. Domain keyword hits are
+    recorded as advisory metadata: a page can be perfectly decoded and contain
+    none of them.
+    """
     if not words:
         return GarbleReport(True, 0.0, False, (), {"reason": "empty"})
 
@@ -333,6 +371,12 @@ def extract_page_words(
     backend: FitzBackend | None,
     config: ExtractConfig = ExtractConfig(),
 ) -> tuple[list[dict], GarbleReport, str]:
+    """Generate candidate extractions, return the best one.
+
+    Short-circuits on the first clean result (the common case costs exactly one
+    extraction); otherwise every candidate is scored and the argmax wins, so a
+    degraded-but-readable page returns its *best* reading rather than its last.
+    """
     strategies: list[tuple[str, Callable[[], list[dict]]]] = [
         ("pdfplumber", lambda: extract_words_pdfplumber(page, config)),
         ("pdfplumber_tight", lambda: extract_words_pdfplumber(page, config, tight=True)),
@@ -370,6 +414,14 @@ def tokens_from_table_matrix(
     page_index: int,
     source: str = "pdfplumber_table",
 ) -> list[Token]:
+    """Convert an already-extracted table into one Token per non-empty cell.
+
+    The matrix is passed in rather than re-extracted: `table.extract()` is not
+    cheap and the caller already needs the result.
+
+    Merged cells come back as None in both `row.cells` and the text matrix, so
+    both are guarded.
+    """
     tokens: list[Token] = []
     for row_obj, row_text in zip(table.rows, matrix):
         for cell_bbox, text in zip(row_obj.cells, row_text):
@@ -400,6 +452,7 @@ KNOWN_TESTS: frozenset[str] = frozenset({
 
 
 def extraction_quality(tokens: Sequence[Token]) -> dict:
+    """Did extraction work? Independent of what the document is about."""
     text = " ".join(t.text for t in tokens)
     numbers = re.findall(r"\d+\.?\d*", text)
     return {
@@ -412,6 +465,11 @@ def extraction_quality(tokens: Sequence[Token]) -> dict:
 
 
 def domain_match(tokens: Sequence[Token], vocabulary: Iterable[str] = KNOWN_TESTS) -> dict:
+    """Does this look like a lab report we recognize?
+
+    Word-boundary matching, because substring matching finds 'lh' inside
+    'health' and 'test' inside 'latest'.
+    """
     text = " ".join(t.text for t in tokens).lower()
     hits = sorted(
         name for name in vocabulary
@@ -567,3 +625,49 @@ def process_digital_pdf(
         backend.close()
         if pdf is not None:
             pdf.close()
+
+
+# --------------------------------------------------------------------------
+# Entry point
+# --------------------------------------------------------------------------
+def main(argv: Sequence[str] | None = None) -> int:
+    """CLI for debugging single or batch PDFs without the full Node stack."""
+    parser = argparse.ArgumentParser(description="Extract text from digital PDFs.")
+    parser.add_argument("paths", nargs="+", type=Path, help="PDF file(s) to process")
+    parser.add_argument("--json", action="store_true", help="emit summaries as JSON")
+    parser.add_argument("-v", "--verbose", action="store_true")
+    args = parser.parse_args(argv)
+
+    logging.basicConfig(
+        level=logging.DEBUG if args.verbose else logging.INFO,
+        format="%(levelname)s %(name)s: %(message)s",
+    )
+
+    exit_code = 0
+    for path in args.paths:
+        out = process_digital_pdf(path)
+        if out.status in ("error", "garbled"):
+            exit_code = 1
+
+        structured = structure_document(out.tokens)
+
+        if args.json:
+            payload = {
+                "path": str(path),
+                "summary": out.summary(),
+                "structured": structured,
+            }
+            print(json.dumps(payload, default=str, ensure_ascii=False))
+            continue
+
+        print(f"\n=== {path} ===")
+        for key, value in out.summary().items():
+            print(f"{key}: {value}")
+        print("\n--- Structured ---")
+        print(to_json(structured))
+
+    return exit_code
+
+
+if __name__ == "__main__":
+    sys.exit(main())

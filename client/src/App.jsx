@@ -1,13 +1,21 @@
 import { BrowserRouter } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext.jsx';
+import { ToastProvider } from './context/ToastContext';
+import { PatientProvider } from './context/PatientContext';
 import { AppRoutes } from './routes/AppRoutes.jsx';
+import DevStateSwitcher from './components/dev/DevStateSwitcher';
 
 export function App() {
   return (
     <AuthProvider>
-      <BrowserRouter>
-        <AppRoutes />
-      </BrowserRouter>
+      <ToastProvider>
+        <PatientProvider>
+          <BrowserRouter>
+            <AppRoutes />
+            <DevStateSwitcher />
+          </BrowserRouter>
+        </PatientProvider>
+      </ToastProvider>
     </AuthProvider>
   );
 }

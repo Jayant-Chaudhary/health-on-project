@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '../services/supabaseClient.js';
-import { fetchProfile, signIn as apiSignIn, signUp as apiSignUp, signOut as apiSignOut } from '../services/authService.js';
+import { fetchProfile, signIn as apiSignIn, signUp as apiSignUp, signOut as apiSignOut, completeOnboarding as apiCompleteOnboarding } from '../services/authService.js';
 
 const AuthContext = createContext(null);
 
@@ -58,6 +58,16 @@ export function AuthProvider({ children }) {
     return await apiSignOut();
   };
 
+  const completeOnboarding = async (details) => {
+    if (!user || !profile) return { success: false, error: new Error('User not loaded') };
+    const result = await apiCompleteOnboarding(user.id, profile.role, details);
+    if (result.success) {
+      const updatedProfile = await fetchProfile(user.id);
+      setProfile(updatedProfile);
+    }
+    return result;
+  };
+
   const value = {
     user,
     profile,
@@ -67,6 +77,7 @@ export function AuthProvider({ children }) {
     login,
     signup,
     logout,
+    completeOnboarding,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
