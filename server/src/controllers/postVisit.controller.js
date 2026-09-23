@@ -99,4 +99,23 @@ async function getPostVisitSummary(req, res, next) {
   }
 }
 
-module.exports = { saveNotes, addPrescription, addActionItem, getPostVisitSummary };
+async function toggleActionItem(req, res, next) {
+  try {
+    const { isCompleted } = req.body;
+    const { itemId } = req.params;
+
+    const { data, error } = await supabaseAdmin
+      .from('post_visit_action_items')
+      .update({ is_completed: isCompleted })
+      .eq('id', itemId)
+      .select()
+      .single();
+
+    if (error) throw error;
+    res.json(data);
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { saveNotes, addPrescription, addActionItem, getPostVisitSummary, toggleActionItem };

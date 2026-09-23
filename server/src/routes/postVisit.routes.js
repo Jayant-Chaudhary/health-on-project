@@ -12,6 +12,7 @@ const {
   addPrescription,
   addActionItem,
   getPostVisitSummary,
+  toggleActionItem,
 } = require('../controllers/postVisit.controller');
 
 const router = express.Router();
@@ -32,5 +33,6 @@ router.post(
   validateBody(addActionItemSchema),
   addActionItem
 );
+router.patch('/action-items/:itemId', toggleActionItem);
 
 module.exports = router;

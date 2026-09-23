@@ -2,29 +2,29 @@ import { request } from './apiClient';
 
 export const patientService = {
   async getProfile() {
-    return request('/api/auth/me');
+    return request('/auth/me');
   },
 
   async getAppointment() {
-    const appointments = await request('/api/appointments');
+    const appointments = await request('/appointments');
     // For now, return the most recent active appointment, or the first one
-    return appointments && appointments.length > 0 ? appointments[0] : null;
+    return appointments && appointments.length > 0 ? appointments.find(a => a.status !== 'completed' && a.status !== 'cancelled') || appointments[0] : null;
   },
 
   async logVitals(vitals) {
-    return request('/api/vitals', {
+    return request('/vitals', {
       method: 'POST',
       body: vitals
     });
   },
 
   async getLatestVitals() {
-    const vitals = await request('/api/vitals');
+    const vitals = await request('/vitals');
     return vitals && vitals.length > 0 ? vitals[vitals.length - 1] : null;
   },
 
   async updateAppointmentStatus(id, status) {
-    return request(`/api/appointments/${id}/status`, {
+    return request(`/appointments/${id}/status`, {
       method: 'PATCH',
       body: { status }
     });
@@ -32,7 +32,7 @@ export const patientService = {
 
   async getVisitSummary() {
     // Fetch all appointments, then for completed ones fetch their post-visit summaries
-    const appointments = await request('/api/appointments');
+    const appointments = await request('/appointments');
     if (!appointments) return [];
 
     const pastAppointments = appointments.filter(a => a.status === 'completed' || a.status === 'archived');
@@ -40,9 +40,14 @@ export const patientService = {
     const summaries = await Promise.all(
       pastAppointments.map(async (app) => {
         try {
-          const summary = await request(`/api/post-visit/${app.id}`);
+          const summary = await request(`/post-visit/${app.id}`);
           // Merge summary data with appointment context
-          return { ...summary, id: app.id, date: app.appointment_date, doctorName: 'Dr. Sarah Jenkins' };
+          return { 
+            ...summary, 
+            id: app.id, 
+            date: app.scheduled_at, 
+            doctorName: app.clinician?.full_name || 'Your Doctor' 
+          };
         } catch (e) {
           return null; // summary might not exist yet
         }
@@ -52,9 +57,10 @@ export const patientService = {
     return summaries.filter(Boolean);
   },
   
-  async toggleNextStep(appointmentId, itemId, done) {
-    console.warn("Backend does not explicitly support toggling post-visit action items for patients yet.");
-    // In a real app we'd PATCH /api/post-visit/:id/action-items/:itemId
-    return true; 
+  async toggleNextStep(itemId, done) {
+    return request(`/post-visit/action-items/${itemId}`, {
+      method: 'PATCH',
+      body: { isCompleted: done },
+    });
   }
 };

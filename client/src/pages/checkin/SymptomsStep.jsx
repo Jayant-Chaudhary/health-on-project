@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { checkinService } from '../../services/checkinService';
+import { usePatientContext } from '../../context/PatientContext';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { YesNoToggle } from '../../components/ui/YesNoToggle';
@@ -11,6 +12,7 @@ export default function SymptomsStep() {
   const [answers, setAnswers] = useState({});
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
+  const { appointment } = usePatientContext();
 
   useEffect(() => {
     async function load() {
@@ -37,7 +39,9 @@ export default function SymptomsStep() {
 
   const handleNext = async () => {
     // In a real app we'd validate here
-    await checkinService.saveAnswers(answers);
+    if (appointment) {
+      await checkinService.saveAnswers(appointment.id, answers);
+    }
     navigate('/checkin/checklist');
   };
 

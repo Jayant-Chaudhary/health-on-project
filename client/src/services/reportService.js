@@ -1,39 +1,52 @@
 import { request } from './apiClient';
+import { supabase } from './supabaseClient';
 
 export const reportService = {
   async getReports() {
-    // GET /api/lab-reports returns all reports for the current patient globally.
-    return request('/api/lab-reports');
+    const data = await request('/lab-reports');
+    // Map DB fields to UI fields
+    return data.map(r => ({
+      id: r.id,
+      title: r.source_name || r.storage_path?.split('/').pop() || 'Uploaded Report',
+      reportDate: r.report_date || r.uploaded_at,
+      status: r.ocr_status === 'completed' ? 'success' : 
+              r.ocr_status === 'failed' || r.ocr_status === 'requires_review' ? 'needs_attention' : 
+              'processing'
+    }));
   },
 
-  async uploadReport(file) {
-    // In a full implementation, we would upload 'file' to Supabase Storage first,
-    // get the public storagePath, and run an OCR extractor on it.
-    // For now, we simulate the OCR payload so the backend can ingest it.
-    
-    // Create a local blob URL for temporary preview if needed (though storagePath is better)
-    const localUrl = URL.createObjectURL(file);
-    
-    const payload = {
-      storagePath: localUrl, // In reality, this would be "reports/uuid-filename.jpg"
-      reportDate: new Date().toISOString(),
-      ocrStatus: 'success',
-      metrics: [
-        { key: 'HGB', value: 12.5, unit: 'g/dL', confidence: 0.95 },
-        { key: 'WBC', value: 8.2, unit: '10^9/L', confidence: 0.90 }
-      ]
-    };
+  async uploadReport(file, appointmentId) {
+    // 1. Upload file to Supabase storage 'lab-reports' bucket
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+    const filePath = `uploads/${fileName}`;
 
-    // Send the simulated OCR payload to the backend
-    return request('/api/lab-reports', {
+    const { data: uploadData, error: uploadError } = await supabase.storage
+      .from('lab-reports')
+      .upload(filePath, file);
+
+    if (uploadError) {
+      throw uploadError;
+    }
+
+    // 2. Call backend to ingest it
+    // If OCR pipeline is integrated, it might be triggered here or via a webhook.
+    // For now we just create the record.
+    return request('/lab-reports', {
       method: 'POST',
-      body: payload
+      body: {
+        appointmentId: appointmentId || null,
+        storagePath: uploadData.path,
+        reportDate: new Date().toISOString(),
+        metrics: [],
+        ocrStatus: 'pending'
+      }
     });
   },
 
   async removeReport(id) {
-    // Currently no DELETE route for lab reports in the backend yet.
-    console.warn("Backend does not support deleting reports yet.");
+    // Not supported by backend yet, so just returning true for now
+    // In real app we'd DELETE /lab-reports/:id
     return true;
   }
 };

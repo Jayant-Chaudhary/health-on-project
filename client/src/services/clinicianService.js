@@ -3,7 +3,6 @@ import { request } from './apiClient.js';
 /** Patients in the clinician's queue, for the sidebar and search. */
 export async function fetchPatients() {
   const appointments = await request('/appointments');
-
   return appointments.map((appointment) => ({
     id: appointment.patient_id,
     name: appointment.patient?.full_name ?? 'Unknown patient',
@@ -58,7 +57,6 @@ export async function fetchPatientDashboard(patientId, appointmentId) {
 /** Historical series for one metric, for the expanded row chart. */
 export async function fetchMetricTrend(standardKey, patientId) {
   const rows = await request(`/lab-reports/trend/${standardKey}?patientId=${patientId}`);
-
   return rows.map((row) => ({
     date: row.created_at,
     value: Number(row.reviewed_value ?? row.parsed_value),
