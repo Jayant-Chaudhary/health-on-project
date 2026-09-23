@@ -11,7 +11,7 @@ import { supabase } from './supabaseClient.js';
  * @param {string} [params.phone] - User phone number
  * @returns {Promise<{ user: Object|null, session: Object|null, error: Object|null }>}
  */
-export async function signUpUser({ email, password, fullName = '', role = 'patient', phone = '' }) {
+export async function signUpUser({ email, password, fullName = '', role = 'patient', phone = '', specialty = null, licenseNumber = null }) {
   try {
     // 1. Sign up user with Supabase Auth
     const { data: authData, error: authError } = await supabase.auth.signUp({
@@ -50,12 +50,20 @@ export async function signUpUser({ email, password, fullName = '', role = 'patie
       // Non-blocking, but return note
     }
 
-    // 3. If patient role, optionally initialize patient_details
+    // 3. Initialize specific details based on role
     if (role === 'patient') {
       await supabase
         .from('patient_details')
         .upsert({
           profile_id: user.id,
+        });
+    } else if (role === 'clinician') {
+      await supabase
+        .from('clinician_details')
+        .upsert({
+          profile_id: user.id,
+          specialty: specialty,
+          license_number: licenseNumber
         });
     }
 

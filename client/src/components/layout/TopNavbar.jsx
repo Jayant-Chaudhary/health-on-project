@@ -1,10 +1,18 @@
-import { NavLink } from 'react-router-dom';
+import { NavLink, useNavigate } from 'react-router-dom';
 import { Home, FileText, ClipboardList, User } from 'lucide-react';
 import { cn } from '../../utils/cn';
 import { usePatientContext } from '../../context/PatientContext';
+import { useAuth } from '../../hooks/useAuth';
 
 export default function TopNavbar() {
   const { appointment, patient } = usePatientContext();
+  const { logout } = useAuth();
+  const navigate = useNavigate();
+  
+  const handleLogout = async () => {
+    await logout();
+    navigate('/login');
+  };
   
   const showBadge = appointment?.status === 'SCHEDULED' || appointment?.status === 'CHECKIN_IN_PROGRESS';
 
@@ -75,7 +83,10 @@ export default function TopNavbar() {
                   Personal Details
                 </NavLink>
                 <div className="border-t border-ink-soft/10 my-1"></div>
-                <button className="w-full text-left px-4 py-2 text-sm text-attention font-medium hover:bg-attention-light transition-colors">
+                <button 
+                  onClick={handleLogout}
+                  className="w-full text-left px-4 py-2 text-sm text-attention font-medium hover:bg-attention-light transition-colors"
+                >
                   Log out
                 </button>
               </div>
