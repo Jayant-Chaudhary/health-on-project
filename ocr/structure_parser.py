@@ -176,11 +176,24 @@ def is_test_row(fields: list[Field]) -> bool:
     return True
 
 
+#: A line that is nothing but a parenthesized phrase - "(Hexokinase,CLIA,RIA)"
+#: - is the analytical method for the section above it, not a new section.
+#: Without this every panel heading is immediately overwritten by its own
+#: method line, and the tests end up filed under the method.
+_METHOD_ONLY_RE = re.compile(r"^\([^()]*\)$")
+
+
+def is_method_annotation(text: str) -> bool:
+    return bool(_METHOD_ONLY_RE.match(text.strip()))
+
+
 def is_section_title(fields: list[Field]) -> bool:
     if len(fields) != 1:
         return False
     text = fields[0].text
     if not text or looks_like_number(text):
+        return False
+    if is_method_annotation(text):
         return False
     # "Collected: 12/10/2025" is a header field that happens to be long, not a
     # section heading. Without this, every key-value line over the length
@@ -193,21 +206,81 @@ def is_section_title(fields: list[Field]) -> bool:
 # ------------------------------------------------------------------
 # Parsers
 # ------------------------------------------------------------------
-def parse_kv(fields: list[Field]) -> tuple[str, str] | None:
-    if not fields:
-        return None
+def _is_known_label(text: str) -> bool:
+    """True when `text` is a header label this module recognizes."""
+    squashed = re.sub(r"[^a-z0-9]", "", text.strip().lower())
+    return bool(squashed) and squashed in _SQUASHED_HEADER_KEY_MAP
 
-    for i, f in enumerate(fields):
-        if ":" not in f.text:
+
+def parse_kv_pairs(fields: list[Field]) -> list[tuple[str, str]]:
+    """Split a header line into every `label : value` pair it carries.
+
+    Lab headers are laid out in two columns, so one visual line holds two
+    records: ``Lab No. : 196404930   Age : 23 Years``. Treating the first
+    colon as the only separator buries the second label inside the first
+    value, which is how age and gender went missing entirely.
+
+    A colon only starts a new pair when the words before it are a *known*
+    header label. That keeps clock times (``12:01:00PM``) and prose colons
+    from being mistaken for column boundaries, and means an unrecognized
+    layout degrades to the old single-pair behaviour rather than splitting
+    somewhere arbitrary.
+    """
+    text = " ".join(f.text for f in fields).strip()
+    if ":" not in text:
+        return []
+
+    words = text.split()
+
+    # Word index -> the label ending at that word, for every colon boundary.
+    boundaries: list[tuple[int, int, str]] = []  # (label_start, label_end, label)
+    for i, word in enumerate(words):
+        if ":" not in word:
             continue
-        before, _, after = f.text.partition(":")
-        label_parts = [ff.text for ff in fields[:i]] + [before]
-        value_parts = [after] + [ff.text for ff in fields[i + 1:]]
-        label = " ".join(p for p in label_parts if p).strip()
-        value = " ".join(p for p in value_parts if p).strip()
-        if label and not label.endswith(":"):
-            return label, value
-    return None
+        # The colon may be glued to the label ("Name:") or stand alone (":").
+        head, _, _ = word.partition(":")
+        candidates = []
+        if head:
+            candidates.append((i, i + 1, head))
+        # Look back up to 3 words for a multi-word label ("Report Status :").
+        for back in range(1, 4):
+            start = i - back if head else i - back + 1
+            if start < 0:
+                continue
+            end = i + 1 if head else i
+            if end <= start:
+                continue
+            label = " ".join(words[start:end]).rstrip(":")
+            candidates.append((start, end, label))
+
+        for start, end, label in candidates:
+            if _is_known_label(label):
+                boundaries.append((start, end, label))
+                break
+
+    if not boundaries:
+        # Nothing recognized: fall back to "first colon wins", as before.
+        before, _, after = text.partition(":")
+        label = before.strip()
+        return [(label, after.strip())] if label else []
+
+    pairs: list[tuple[str, str]] = []
+    for idx, (start, end, label) in enumerate(boundaries):
+        value_start = end
+        value_end = boundaries[idx + 1][0] if idx + 1 < len(boundaries) else len(words)
+        value = " ".join(words[value_start:value_end]).lstrip(":").strip()
+        pairs.append((label, value))
+    return pairs
+
+
+def parse_kv(fields: list[Field]) -> tuple[str, str] | None:
+    """First `label : value` pair on the line, or None.
+
+    Kept for callers that only need to know whether a line is a key-value
+    line at all; `parse_kv_pairs` is what the document walker uses.
+    """
+    pairs = parse_kv_pairs(fields)
+    return pairs[0] if pairs else None
 
 
 def parse_test_row(fields: list[Field]) -> dict | None:
@@ -342,25 +415,27 @@ def structure_document(
             test = parse_test_row(fields)
             if test:
                 if current_section is None:
-                    current_section = {"title": None, "tests": []}
+                    current_section = {"title": None, "method": None, "tests": []}
                     sections.append(current_section)
                 current_section["tests"].append(test)
                 continue
 
+            if len(fields) == 1 and is_method_annotation(fields[0].text):
+                if current_section is not None:
+                    current_section["method"] = fields[0].text.strip()
+                continue
+
             if is_section_title(fields):
-                current_section = {"title": fields[0].text, "tests": []}
+                current_section = {"title": fields[0].text, "method": None, "tests": []}
                 sections.append(current_section)
                 continue
 
-            kv = parse_kv(fields)
-            if kv:
-                key, value = kv
+            for key, value in parse_kv_pairs(fields):
                 norm = normalize_key(key)
                 if norm in _PATIENT_KEYS:
                     patient[norm] = value
                 else:
                     meta[norm] = value
-                continue
 
     return {
         "patient": patient,

@@ -5,16 +5,25 @@
 -- Why this file exists
 -- --------------------
 -- standardizeLabReport.service.js matches a report's printed test name
--- against these aliases by EXACT equality after normalizeKey() lowercases
--- the string and strips every non-alphanumeric character. So:
+-- against these aliases in two passes: exact equality after normalizeKey()
+-- lowercases and strips every non-alphanumeric character, then an
+-- order-insensitive pass that sorts the words before comparing. So:
 --
 --   * Punctuation variants are redundant. "Testosterone, Total" and
---     "Testosterone Total" both normalize to "testosteronetotal" — listing
---     one is enough.
---   * WORD ORDER is not. "Glucose Fasting" and "Fasting Glucose" normalize
---     differently and BOTH must be listed. Same for qualifier suffixes:
---     a report printing "TSH, Ultrasensitive" will not match the alias
---     "TSH", so the qualified spelling is listed too.
+--     "Testosterone Total" both normalize to "testosteronetotal".
+--   * Word-order variants are redundant too, since the second pass sorts
+--     the words. "Glucose Fasting" finds the alias "Fasting Glucose" on its
+--     own. Both are still listed where labs commonly print both, so the
+--     exact pass resolves them without falling through.
+--   * QUALIFIER SPELLINGS ARE NOT REDUNDANT. Sorting does not remove words,
+--     so a report printing "TSH, Ultrasensitive" will never reach the alias
+--     "TSH" — the qualified spelling has to be listed. This is deliberate:
+--     stripping qualifiers would collapse "Testosterone, Total" onto
+--     "Testosterone, Free", which are different analytes.
+--
+-- A spelling that two different metrics share is dropped from the
+-- order-insensitive index rather than resolved arbitrarily, so adding an
+-- alias can never silently steal another metric's values.
 --
 -- unit_standard must match what the labs actually print. convertUnit()
 -- knows only a handful of conversions and flags needs_review on anything
