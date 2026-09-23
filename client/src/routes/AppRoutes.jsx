@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import ProtectedRoute from './ProtectedRoute';
 import AppShell from '../layouts/AppShell';
 import CheckinLayout from '../layouts/CheckinLayout';
+import AuthLayout from '../layouts/AuthLayout';
 
 // Patient Pages
 import HomePage from '../pages/home/HomePage';
@@ -12,16 +13,33 @@ import SymptomsStep from '../pages/checkin/SymptomsStep';
 import ChecklistStep from '../pages/checkin/ChecklistStep';
 import CheckinDonePage from '../pages/checkin/CheckinDonePage';
 
+// Auth Pages
+import LoginPage from '../pages/auth/LoginPage';
+import SignupPage from '../pages/auth/SignupPage';
+
 // Clinician Pages
 import { ClinicianDashboard } from '../pages/clinician/ClinicianDashboard.jsx';
 import { ComingSoon } from '../pages/clinician/ComingSoon.jsx';
+import VerificationPending from '../pages/clinician/VerificationPending.jsx';
+
+// Onboarding Pages
+import PatientOnboarding from '../pages/onboarding/PatientOnboarding.jsx';
+import ClinicianOnboarding from '../pages/onboarding/ClinicianOnboarding.jsx';
 
 export function AppRoutes() {
   return (
     <Routes>
-      {/* Patient Public Routes */}
-      <Route path="/login" element={<div>Login Placeholder</div>} />
+      {/* Public Auth Routes */}
+      <Route element={<AuthLayout />}>
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/signup" element={<SignupPage />} />
+      </Route>
       <Route path="/invite/:token" element={<div>Invite Placeholder</div>} />
+
+      {/* Onboarding Routes */}
+      <Route path="/onboarding/patient" element={<ProtectedRoute allowIncomplete><PatientOnboarding /></ProtectedRoute>} />
+      <Route path="/onboarding/clinician" element={<ProtectedRoute allowIncomplete><ClinicianOnboarding /></ProtectedRoute>} />
+      <Route path="/verification-pending" element={<ProtectedRoute allowIncomplete><VerificationPending /></ProtectedRoute>} />
       
       {/* Patient App Shell Routes */}
       <Route element={<ProtectedRoute><AppShell /></ProtectedRoute>}>
@@ -39,11 +57,11 @@ export function AppRoutes() {
       <Route path="/checkin/done" element={<ProtectedRoute><CheckinDonePage /></ProtectedRoute>} />
 
       {/* Clinician Routes */}
-      <Route path="/clinician" element={<ClinicianDashboard />} />
-      <Route path="/clinician/schedule" element={<ComingSoon title="Schedule" icon="calendar" />} />
-      <Route path="/clinician/patients" element={<ComingSoon title="Patients" icon="users" />} />
-      <Route path="/clinician/lab-inbox" element={<ComingSoon title="Lab Inbox" icon="flask" />} />
-      <Route path="/clinician/analytics" element={<ComingSoon title="Analytics" icon="chart" />} />
+      <Route path="/clinician" element={<ProtectedRoute requireVerifiedClinician><ClinicianDashboard /></ProtectedRoute>} />
+      <Route path="/clinician/schedule" element={<ProtectedRoute requireVerifiedClinician><ComingSoon title="Schedule" icon="calendar" /></ProtectedRoute>} />
+      <Route path="/clinician/patients" element={<ProtectedRoute requireVerifiedClinician><ComingSoon title="Patients" icon="users" /></ProtectedRoute>} />
+      <Route path="/clinician/lab-inbox" element={<ProtectedRoute requireVerifiedClinician><ComingSoon title="Lab Inbox" icon="flask" /></ProtectedRoute>} />
+      <Route path="/clinician/analytics" element={<ProtectedRoute requireVerifiedClinician><ComingSoon title="Analytics" icon="chart" /></ProtectedRoute>} />
       
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

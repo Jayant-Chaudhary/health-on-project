@@ -1,29 +1,51 @@
 import { useState, useEffect } from 'react';
+import { getCurrentUser, signInUser, signUpUser, signOutUser } from '../services/authService';
 
-// A mock useAuth hook that simulates a logged-in user in dev mode
 export function useAuth() {
   const [session, setSession] = useState(null);
+  const [userProfile, setUserProfile] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Simulate checking session
-    setTimeout(() => {
-      const mockSession = { user: { id: 'patient_1', email: 'priya@example.com' } };
-      // If we're mocking, auto-login for now
-      if (import.meta.env.VITE_USE_MOCK !== 'false') {
-        setSession(mockSession);
+    async function loadSession() {
+      try {
+        const { session, profile } = await getCurrentUser();
+        setSession(session);
+        setUserProfile(profile);
+      } catch (err) {
+        console.error('Failed to load session', err);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
-    }, 500);
+    }
+    loadSession();
   }, []);
 
-  const login = (email, password) => {
-    setSession({ user: { id: 'patient_1', email } });
+  const login = async (email, password) => {
+    const { session, profile, error } = await signInUser({ email, password });
+    if (!error) {
+      setSession(session);
+      setUserProfile(profile);
+    }
+    return { session, profile, error };
+  };
+  
+  const signup = async (data) => {
+    const { session, user, error } = await signUpUser(data);
+    if (!error && session) {
+      setSession(session);
+      // fetch profile since signup doesn't return it directly
+      const { profile } = await getCurrentUser();
+      setUserProfile(profile);
+    }
+    return { session, user, error };
   };
 
-  const logout = () => {
+  const logout = async () => {
+    await signOutUser();
     setSession(null);
+    setUserProfile(null);
   };
 
-  return { session, loading, login, logout };
+  return { session, profile: userProfile, loading, login, signup, logout };
 }
