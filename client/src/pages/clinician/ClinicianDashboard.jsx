@@ -29,6 +29,8 @@ export function ClinicianDashboard() {
   const [collapsed, setCollapsed] = useState(false);
   const [patients, setPatients] = useState([]);
   const [selected, setSelected] = useState(null);
+  const [queueError, setQueueError] = useState(null);
+  const [queueLoading, setQueueLoading] = useState(true);
 
   useEffect(() => {
     fetchPatients()
@@ -36,7 +38,8 @@ export function ClinicianDashboard() {
         setPatients(list);
         setSelected((current) => current ?? list[0] ?? null);
       })
-      .catch((error) => console.error('Failed to load patient queue:', error));
+      .catch(setQueueError)
+      .finally(() => setQueueLoading(false));
   }, []);
 
   const { data, loading, error, patch } = usePatientDashboard(selected?.id, selected?.appointmentId);
@@ -111,13 +114,21 @@ export function ClinicianDashboard() {
         />
 
         <main className="flex min-h-0 flex-1 flex-col gap-4 px-6 py-5">
-          {loading && !data ? (
+          {queueLoading || (loading && !data) ? (
             <div className="flex flex-1 items-center justify-center gap-3 text-ink-3">
               <Spinner /> Loading patient record…
             </div>
-          ) : error ? (
-            <div className="card flex flex-1 items-center justify-center p-8 text-center text-terracotta">
-              {error.message}
+          ) : queueError || error ? (
+            <div className="card flex flex-1 flex-col items-center justify-center gap-2 p-8 text-center">
+              <p className="font-display text-head-sm text-terracotta">Could not reach the clinic API</p>
+              <p className="max-w-md text-body-md text-ink-2">{(queueError || error).message}</p>
+            </div>
+          ) : !selected ? (
+            <div className="card flex flex-1 flex-col items-center justify-center gap-2 p-8 text-center">
+              <p className="font-display text-head-sm text-ink">No patients in the queue</p>
+              <p className="max-w-md text-body-md text-ink-2">
+                Appointments appear here once the clinic has issued invites.
+              </p>
             </div>
           ) : (
             data && (

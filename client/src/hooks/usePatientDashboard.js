@@ -12,7 +12,14 @@ export function usePatientDashboard(patientId, appointmentId) {
   const [error, setError] = useState(null);
 
   const load = useCallback(async () => {
-    if (!patientId) return;
+    // No patient selected (empty queue, or the queue failed to load) — settle
+    // rather than leaving the caller on a spinner forever.
+    if (!patientId) {
+      setData(null);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     setError(null);
     try {
