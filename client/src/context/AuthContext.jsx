@@ -58,9 +58,10 @@ export function AuthProvider({ children }) {
     return await apiSignOut();
   };
 
-  const completeOnboarding = async (details) => {
-    if (!user || !profile) return { success: false, error: new Error('User not loaded') };
-    const result = await apiCompleteOnboarding(user.id, profile.role, details);
+  const completeOnboarding = async (details, roleOverride) => {
+    if (!user) return { success: false, error: new Error('User not loaded') };
+    const activeRole = roleOverride || profile?.role || 'patient';
+    const result = await apiCompleteOnboarding(user.id, activeRole, details);
     if (result.success) {
       const updatedProfile = await fetchProfile(user.id);
       setProfile(updatedProfile);

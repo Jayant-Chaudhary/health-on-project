@@ -15,7 +15,7 @@ export default function ClinicianOnboarding() {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
-  const { completeOnboarding } = useAuthContext();
+  const { completeOnboarding, logout } = useAuthContext();
 
   const handleChange = (e) => {
     setFormData((prev) => ({ ...prev, [e.target.name]: e.target.value }));
@@ -102,6 +102,16 @@ export default function ClinicianOnboarding() {
         <Button type="submit" variant="primary" className="w-full mt-4" isLoading={isLoading}>
           Submit for Verification
         </Button>
+        <button
+          type="button"
+          onClick={async () => {
+            await logout();
+            navigate('/login');
+          }}
+          className="w-full mt-4 text-sm font-medium text-slate-500 hover:text-slate-700 transition-colors"
+        >
+          Log out
+        </button>
       </form>
     </div>
   );

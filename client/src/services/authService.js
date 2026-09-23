@@ -130,29 +130,36 @@ export async function fetchProfile(userId) {
 
 export async function completeOnboarding(userId, role, details) {
   try {
-    // 1. Update basic profile
+    // 1. Update basic profile using upsert in case it doesn't exist
     const { error: profileError } = await supabase
       .from('profiles')
-      .update({
+      .upsert({
+        id: userId,
+        role: role,
         full_name: details.fullName,
         phone: details.phone
-      })
-      .eq('id', userId);
+      });
 
     if (profileError) throw profileError;
 
     // 2. Update specific details
     if (role === 'patient') {
-      // Add any specific patient updates if needed
+      const { error: patientError } = await supabase
+        .from('patient_details')
+        .upsert({
+          profile_id: userId
+        });
+      if (patientError) throw patientError;
     } else if (role === 'clinician') {
       const { error: clinicianError } = await supabase
         .from('clinician_details')
-        .update({
+        .upsert({
+          profile_id: userId,
           specialty: details.specialty,
           license_number: details.licenseNumber,
-          state_medical_council: details.stateMedicalCouncil
-        })
-        .eq('profile_id', userId);
+          state_medical_council: details.stateMedicalCouncil,
+          is_verified: false
+        });
         
       if (clinicianError) throw clinicianError;
     }
