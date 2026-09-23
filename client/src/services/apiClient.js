@@ -2,8 +2,6 @@ import { supabase } from './supabaseClient.js';
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:4000';
 
-export const USE_MOCK_DATA = String(import.meta.env.VITE_USE_MOCK_DATA) === 'true';
-
 export class ApiError extends Error {
   constructor(message, status) {
     super(message);
@@ -41,21 +39,4 @@ export async function request(path, { method = 'GET', body, signal } = {}) {
   }
 
   return response.status === 204 ? null : response.json();
-}
-
-/**
- * Runs `live` against the API, falling back to `fallback()` when mock mode is on
- * or the backend is unreachable. Auth/permission errors are re-thrown — those
- * are real failures the clinician needs to see, not a reason to show demo data.
- */
-export async function withFallback(live, fallback) {
-  if (USE_MOCK_DATA) return fallback();
-
-  try {
-    return await live();
-  } catch (error) {
-    if (error instanceof ApiError && error.status >= 400 && error.status < 500) throw error;
-    console.warn('[api] falling back to demo data:', error.message);
-    return fallback();
-  }
 }

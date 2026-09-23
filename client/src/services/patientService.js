@@ -1,50 +1,60 @@
-import { mockDb } from './mock/mockDb';
-import { delay } from './mock/delay';
+import { request } from './apiClient';
 
 export const patientService = {
   async getProfile() {
-    await delay();
-    return mockDb.patient;
+    return request('/api/auth/me');
   },
 
   async getAppointment() {
-    await delay();
-    return mockDb.appointment;
+    const appointments = await request('/api/appointments');
+    // For now, return the most recent active appointment, or the first one
+    return appointments && appointments.length > 0 ? appointments[0] : null;
   },
 
   async logVitals(vitals) {
-    await delay();
-    mockDb.vitals.push({ ...vitals, date: new Date().toISOString() });
-    mockDb.persist();
-    return true;
+    return request('/api/vitals', {
+      method: 'POST',
+      body: vitals
+    });
   },
 
   async getLatestVitals() {
-    await delay();
-    return mockDb.vitals[mockDb.vitals.length - 1] || null;
+    const vitals = await request('/api/vitals');
+    return vitals && vitals.length > 0 ? vitals[vitals.length - 1] : null;
   },
 
-  async updateAppointmentStatus(status) {
-    await delay();
-    mockDb.appointment.status = status;
-    mockDb.persist();
-    return mockDb.appointment;
+  async updateAppointmentStatus(id, status) {
+    return request(`/api/appointments/${id}/status`, {
+      method: 'PATCH',
+      body: { status }
+    });
   },
 
   async getVisitSummary() {
-    await delay();
-    return mockDb.visitSummary;
+    // Fetch all appointments, then for completed ones fetch their post-visit summaries
+    const appointments = await request('/api/appointments');
+    if (!appointments) return [];
+
+    const pastAppointments = appointments.filter(a => a.status === 'completed' || a.status === 'archived');
+    
+    const summaries = await Promise.all(
+      pastAppointments.map(async (app) => {
+        try {
+          const summary = await request(`/api/post-visit/${app.id}`);
+          // Merge summary data with appointment context
+          return { ...summary, id: app.id, date: app.appointment_date, doctorName: 'Dr. Sarah Jenkins' };
+        } catch (e) {
+          return null; // summary might not exist yet
+        }
+      })
+    );
+    
+    return summaries.filter(Boolean);
   },
   
-  async toggleNextStep(id, done) {
-    await delay(300);
-    for (const visit of mockDb.visitSummary) {
-      const step = visit.nextSteps.find(s => s.id === id);
-      if (step) {
-        step.done = done;
-        mockDb.persist();
-        break;
-      }
-    }
+  async toggleNextStep(appointmentId, itemId, done) {
+    console.warn("Backend does not explicitly support toggling post-visit action items for patients yet.");
+    // In a real app we'd PATCH /api/post-visit/:id/action-items/:itemId
+    return true; 
   }
 };

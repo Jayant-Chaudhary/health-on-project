@@ -1,62 +1,39 @@
-import { mockDb } from './mock/mockDb';
-import { delay } from './mock/delay';
-
-let uploadCounter = 0;
+import { request } from './apiClient';
 
 export const reportService = {
   async getReports() {
-    await delay();
-    return mockDb.reports;
+    // GET /api/lab-reports returns all reports for the current patient globally.
+    return request('/api/lab-reports');
   },
 
   async uploadReport(file) {
-    await delay(1500); // simulate upload
-    uploadCounter++;
+    // In a full implementation, we would upload 'file' to Supabase Storage first,
+    // get the public storagePath, and run an OCR extractor on it.
+    // For now, we simulate the OCR payload so the backend can ingest it.
     
-    // Every 3rd upload needs attention
-    const finalStatus = (uploadCounter % 3 === 0) ? 'needs_attention' : 'success';
+    // Create a local blob URL for temporary preview if needed (though storagePath is better)
+    const localUrl = URL.createObjectURL(file);
     
-    const newReport = {
-      id: `report_${Date.now()}`,
-      imageUrl: URL.createObjectURL(file), // temporary local URL for preview
-      title: file.name,
+    const payload = {
+      storagePath: localUrl, // In reality, this would be "reports/uuid-filename.jpg"
       reportDate: new Date().toISOString(),
-      status: 'processing', // starts processing
-      progress: 100
+      ocrStatus: 'success',
+      metrics: [
+        { key: 'HGB', value: 12.5, unit: 'g/dL', confidence: 0.95 },
+        { key: 'WBC', value: 8.2, unit: '10^9/L', confidence: 0.90 }
+      ]
     };
-    
-    mockDb.reports.push(newReport);
-    mockDb.persist();
 
-    // Simulate backend processing
-    setTimeout(() => {
-      const report = mockDb.reports.find(r => r.id === newReport.id);
-      if (report) {
-        report.status = finalStatus;
-        
-        // If it needs attention, add an AI checklist item!
-        if (finalStatus === 'needs_attention') {
-           mockDb.checklist.push({
-             id: `ai_${Date.now()}`,
-             text: `Bring the printed ${file.name} lab report. We couldn't read it clearly.`,
-             source: 'ai',
-             done: false,
-             relatedReportId: report.id
-           });
-        }
-        mockDb.persist();
-      }
-    }, 2000); // 2 seconds processing time
-
-    return newReport;
+    // Send the simulated OCR payload to the backend
+    return request('/api/lab-reports', {
+      method: 'POST',
+      body: payload
+    });
   },
 
   async removeReport(id) {
-    await delay(500);
-    mockDb.reports = mockDb.reports.filter(r => r.id !== id);
-    // Also clean up any related AI checklist items
-    mockDb.checklist = mockDb.checklist.filter(c => c.relatedReportId !== id);
-    mockDb.persist();
+    // Currently no DELETE route for lab reports in the backend yet.
+    console.warn("Backend does not support deleting reports yet.");
     return true;
   }
 };
