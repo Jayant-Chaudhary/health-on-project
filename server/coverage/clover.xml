@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<coverage generated="1790168055647" clover="3.2.0">
-  <project timestamp="1790168055648" name="All files">
-    <metrics statements="497" coveredstatements="348" conditionals="245" coveredconditionals="100" methods="62" coveredmethods="30" elements="804" coveredelements="478" complexity="0" loc="497" ncloc="497" packages="8" files="32" classes="32"/>
+<coverage generated="1790188025832" clover="3.2.0">
+  <project timestamp="1790188025832" name="All files">
+    <metrics statements="497" coveredstatements="413" conditionals="245" coveredconditionals="157" methods="62" coveredmethods="48" elements="804" coveredelements="618" complexity="0" loc="497" ncloc="497" packages="8" files="32" classes="32"/>
     <package name="src">
       <metrics statements="31" coveredstatements="29" conditionals="2" coveredconditionals="1" methods="3" coveredmethods="0"/>
       <file name="app.js" path="D:\PROJECTS\personalProjects\healthon\health-on-project\server\src\app.js">
@@ -443,11 +443,11 @@
       </file>
     </package>
     <package name="src.services">
-      <metrics statements="53" coveredstatements="11" conditionals="32" coveredconditionals="1" methods="10" coveredmethods="0"/>
+      <metrics statements="53" coveredstatements="39" conditionals="32" coveredconditionals="20" methods="10" coveredmethods="7"/>
       <file name="checklist.service.js" path="D:\PROJECTS\personalProjects\healthon\health-on-project\server\src\services\checklist.service.js">
-        <metrics statements="21" coveredstatements="2" conditionals="14" coveredconditionals="0" methods="5" coveredmethods="0"/>
-        <line num="1" count="6" type="stmt"/>
-        <line num="7" count="0" type="stmt"/>
+        <metrics statements="21" coveredstatements="7" conditionals="14" coveredconditionals="2" methods="5" coveredmethods="2"/>
+        <line num="1" count="7" type="stmt"/>
+        <line num="7" count="3" type="stmt"/>
         <line num="13" count="0" type="cond" truecount="0" falsecount="2"/>
         <line num="14" count="0" type="stmt"/>
         <line num="17" count="0" type="stmt"/>
@@ -462,109 +462,109 @@
         <line num="43" count="0" type="cond" truecount="0" falsecount="2"/>
         <line num="44" count="0" type="stmt"/>
         <line num="47" count="0" type="stmt"/>
-        <line num="54" count="0" type="stmt"/>
-        <line num="66" count="0" type="cond" truecount="0" falsecount="2"/>
-        <line num="67" count="0" type="stmt"/>
-        <line num="70" count="0" type="stmt"/>
-        <line num="73" count="6" type="stmt"/>
+        <line num="54" count="2" type="stmt"/>
+        <line num="66" count="2" type="cond" truecount="2" falsecount="0"/>
+        <line num="67" count="1" type="stmt"/>
+        <line num="70" count="1" type="stmt"/>
+        <line num="73" count="7" type="stmt"/>
       </file>
       <file name="invite.service.js" path="D:\PROJECTS\personalProjects\healthon\health-on-project\server\src\services\invite.service.js">
-        <metrics statements="17" coveredstatements="6" conditionals="6" coveredconditionals="1" methods="2" coveredmethods="0"/>
-        <line num="1" count="6" type="stmt"/>
-        <line num="2" count="6" type="stmt"/>
-        <line num="3" count="6" type="stmt"/>
-        <line num="4" count="6" type="stmt"/>
-        <line num="6" count="6" type="stmt"/>
-        <line num="14" count="0" type="stmt"/>
-        <line num="21" count="0" type="stmt"/>
-        <line num="22" count="0" type="stmt"/>
-        <line num="24" count="0" type="stmt"/>
-        <line num="35" count="0" type="cond" truecount="0" falsecount="2"/>
-        <line num="36" count="0" type="stmt"/>
-        <line num="39" count="0" type="stmt"/>
-        <line num="41" count="0" type="stmt"/>
-        <line num="42" count="0" type="stmt"/>
-        <line num="54" count="0" type="stmt"/>
-        <line num="57" count="0" type="stmt"/>
-        <line num="60" count="6" type="stmt"/>
+        <metrics statements="17" coveredstatements="17" conditionals="6" coveredconditionals="6" methods="2" coveredmethods="2"/>
+        <line num="1" count="7" type="stmt"/>
+        <line num="2" count="7" type="stmt"/>
+        <line num="3" count="7" type="stmt"/>
+        <line num="4" count="7" type="stmt"/>
+        <line num="6" count="7" type="stmt"/>
+        <line num="14" count="3" type="stmt"/>
+        <line num="21" count="3" type="stmt"/>
+        <line num="22" count="3" type="stmt"/>
+        <line num="24" count="3" type="stmt"/>
+        <line num="35" count="3" type="cond" truecount="2" falsecount="0"/>
+        <line num="36" count="1" type="stmt"/>
+        <line num="39" count="2" type="stmt"/>
+        <line num="41" count="2" type="stmt"/>
+        <line num="42" count="2" type="stmt"/>
+        <line num="54" count="1" type="stmt"/>
+        <line num="57" count="2" type="stmt"/>
+        <line num="60" count="7" type="stmt"/>
       </file>
       <file name="triage.service.js" path="D:\PROJECTS\personalProjects\healthon\health-on-project\server\src\services\triage.service.js">
-        <metrics statements="15" coveredstatements="3" conditionals="12" coveredconditionals="0" methods="3" coveredmethods="0"/>
-        <line num="1" count="6" type="stmt"/>
-        <line num="2" count="6" type="stmt"/>
-        <line num="8" count="0" type="stmt"/>
-        <line num="9" count="0" type="cond" truecount="0" falsecount="2"/>
-        <line num="11" count="0" type="cond" truecount="0" falsecount="4"/>
-        <line num="12" count="0" type="stmt"/>
-        <line num="15" count="0" type="cond" truecount="0" falsecount="2"/>
-        <line num="16" count="0" type="stmt"/>
-        <line num="19" count="0" type="cond" truecount="0" falsecount="2"/>
-        <line num="23" count="0" type="stmt"/>
-        <line num="35" count="0" type="stmt"/>
-        <line num="47" count="0" type="cond" truecount="0" falsecount="2"/>
-        <line num="48" count="0" type="stmt"/>
-        <line num="51" count="0" type="stmt"/>
-        <line num="54" count="6" type="stmt"/>
+        <metrics statements="15" coveredstatements="15" conditionals="12" coveredconditionals="12" methods="3" coveredmethods="3"/>
+        <line num="1" count="7" type="stmt"/>
+        <line num="2" count="7" type="stmt"/>
+        <line num="8" count="6" type="stmt"/>
+        <line num="9" count="4" type="cond" truecount="2" falsecount="0"/>
+        <line num="11" count="4" type="cond" truecount="4" falsecount="0"/>
+        <line num="12" count="1" type="stmt"/>
+        <line num="15" count="3" type="cond" truecount="2" falsecount="0"/>
+        <line num="16" count="1" type="stmt"/>
+        <line num="19" count="2" type="cond" truecount="2" falsecount="0"/>
+        <line num="23" count="2" type="stmt"/>
+        <line num="35" count="2" type="stmt"/>
+        <line num="47" count="2" type="cond" truecount="2" falsecount="0"/>
+        <line num="48" count="1" type="stmt"/>
+        <line num="51" count="1" type="stmt"/>
+        <line num="54" count="7" type="stmt"/>
       </file>
     </package>
     <package name="src.services.standardization">
-      <metrics statements="51" coveredstatements="9" conditionals="46" coveredconditionals="0" methods="15" coveredmethods="0"/>
+      <metrics statements="51" coveredstatements="46" conditionals="46" coveredconditionals="38" methods="15" coveredmethods="11"/>
       <file name="standardizeLabReport.service.js" path="D:\PROJECTS\personalProjects\healthon\health-on-project\server\src\services\standardization\standardizeLabReport.service.js">
-        <metrics statements="33" coveredstatements="7" conditionals="35" coveredconditionals="0" methods="7" coveredmethods="0"/>
-        <line num="1" count="6" type="stmt"/>
-        <line num="2" count="6" type="stmt"/>
-        <line num="3" count="6" type="stmt"/>
-        <line num="5" count="6" type="stmt"/>
-        <line num="6" count="6" type="stmt"/>
-        <line num="7" count="6" type="stmt"/>
-        <line num="10" count="0" type="stmt"/>
-        <line num="11" count="0" type="cond" truecount="0" falsecount="4"/>
-        <line num="12" count="0" type="stmt"/>
-        <line num="15" count="0" type="stmt"/>
-        <line num="20" count="0" type="cond" truecount="0" falsecount="2"/>
+        <metrics statements="33" coveredstatements="32" conditionals="35" coveredconditionals="27" methods="7" coveredmethods="7"/>
+        <line num="1" count="7" type="stmt"/>
+        <line num="2" count="7" type="stmt"/>
+        <line num="3" count="7" type="stmt"/>
+        <line num="5" count="7" type="stmt"/>
+        <line num="6" count="7" type="stmt"/>
+        <line num="7" count="7" type="stmt"/>
+        <line num="10" count="6" type="stmt"/>
+        <line num="11" count="6" type="cond" truecount="4" falsecount="0"/>
+        <line num="12" count="5" type="stmt"/>
+        <line num="15" count="1" type="stmt"/>
+        <line num="20" count="1" type="cond" truecount="1" falsecount="1"/>
         <line num="21" count="0" type="stmt"/>
-        <line num="24" count="0" type="stmt"/>
-        <line num="25" count="0" type="stmt"/>
-        <line num="26" count="0" type="stmt"/>
-        <line num="30" count="0" type="stmt"/>
-        <line num="34" count="0" type="stmt"/>
-        <line num="36" count="0" type="stmt"/>
-        <line num="37" count="0" type="cond" truecount="0" falsecount="2"/>
-        <line num="38" count="0" type="cond" truecount="0" falsecount="2"/>
-        <line num="43" count="0" type="stmt"/>
-        <line num="45" count="0" type="stmt"/>
-        <line num="46" count="0" type="stmt"/>
-        <line num="47" count="0" type="cond" truecount="0" falsecount="2"/>
-        <line num="48" count="0" type="stmt"/>
-        <line num="50" count="0" type="cond" truecount="0" falsecount="2"/>
-        <line num="51" count="0" type="stmt"/>
-        <line num="63" count="0" type="cond" truecount="0" falsecount="2"/>
-        <line num="67" count="0" type="cond" truecount="0" falsecount="2"/>
-        <line num="69" count="0" type="cond" truecount="0" falsecount="2"/>
-        <line num="71" count="0" type="cond" truecount="0" falsecount="3"/>
-        <line num="73" count="0" type="stmt"/>
-        <line num="86" count="6" type="stmt"/>
+        <line num="24" count="1" type="stmt"/>
+        <line num="25" count="1" type="stmt"/>
+        <line num="26" count="1" type="stmt"/>
+        <line num="30" count="16" type="stmt"/>
+        <line num="34" count="6" type="stmt"/>
+        <line num="36" count="6" type="stmt"/>
+        <line num="37" count="6" type="cond" truecount="2" falsecount="0"/>
+        <line num="38" count="4" type="cond" truecount="1" falsecount="1"/>
+        <line num="43" count="6" type="stmt"/>
+        <line num="45" count="6" type="stmt"/>
+        <line num="46" count="6" type="stmt"/>
+        <line num="47" count="6" type="cond" truecount="2" falsecount="0"/>
+        <line num="48" count="6" type="stmt"/>
+        <line num="50" count="6" type="cond" truecount="2" falsecount="0"/>
+        <line num="51" count="1" type="stmt"/>
+        <line num="63" count="5" type="cond" truecount="2" falsecount="0"/>
+        <line num="67" count="5" type="cond" truecount="2" falsecount="0"/>
+        <line num="69" count="5" type="cond" truecount="2" falsecount="0"/>
+        <line num="71" count="5" type="cond" truecount="3" falsecount="0"/>
+        <line num="73" count="5" type="stmt"/>
+        <line num="86" count="7" type="stmt"/>
       </file>
       <file name="unitConversion.service.js" path="D:\PROJECTS\personalProjects\healthon\health-on-project\server\src\services\standardization\unitConversion.service.js">
-        <metrics statements="18" coveredstatements="2" conditionals="11" coveredconditionals="0" methods="8" coveredmethods="0"/>
-        <line num="1" count="6" type="stmt"/>
-        <line num="2" count="0" type="stmt"/>
+        <metrics statements="18" coveredstatements="14" conditionals="11" coveredconditionals="11" methods="8" coveredmethods="4"/>
+        <line num="1" count="7" type="stmt"/>
+        <line num="2" count="2" type="stmt"/>
         <line num="3" count="0" type="stmt"/>
         <line num="4" count="0" type="stmt"/>
         <line num="5" count="0" type="stmt"/>
-        <line num="6" count="0" type="stmt"/>
+        <line num="6" count="1" type="stmt"/>
         <line num="7" count="0" type="stmt"/>
-        <line num="11" count="0" type="cond" truecount="0" falsecount="2"/>
-        <line num="15" count="0" type="stmt"/>
-        <line num="16" count="0" type="stmt"/>
-        <line num="18" count="0" type="cond" truecount="0" falsecount="5"/>
-        <line num="19" count="0" type="stmt"/>
-        <line num="22" count="0" type="stmt"/>
-        <line num="23" count="0" type="cond" truecount="0" falsecount="2"/>
-        <line num="25" count="0" type="cond" truecount="0" falsecount="2"/>
-        <line num="26" count="0" type="stmt"/>
-        <line num="29" count="0" type="stmt"/>
-        <line num="32" count="6" type="stmt"/>
+        <line num="11" count="12" type="cond" truecount="2" falsecount="0"/>
+        <line num="15" count="6" type="stmt"/>
+        <line num="16" count="6" type="stmt"/>
+        <line num="18" count="6" type="cond" truecount="5" falsecount="0"/>
+        <line num="19" count="2" type="stmt"/>
+        <line num="22" count="4" type="stmt"/>
+        <line num="23" count="4" type="cond" truecount="2" falsecount="0"/>
+        <line num="25" count="4" type="cond" truecount="2" falsecount="0"/>
+        <line num="26" count="1" type="stmt"/>
+        <line num="29" count="3" type="stmt"/>
+        <line num="32" count="7" type="stmt"/>
       </file>
     </package>
     <package name="src.validators">
