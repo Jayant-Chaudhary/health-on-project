@@ -46,12 +46,12 @@ export function AuthProvider({ children }) {
     return () => subscription.unsubscribe();
   }, []);
 
-  const login = async (credentials) => {
-    return await apiSignIn(credentials);
+  const login = async (...args) => {
+    return await apiSignIn(...args);
   };
 
-  const signup = async (payload) => {
-    return await apiSignUp(payload);
+  const signup = async (...args) => {
+    return await apiSignUp(...args);
   };
 
   const logout = async () => {
@@ -74,7 +74,7 @@ export function AuthProvider({ children }) {
     profile,
     session,
     loading,
-    role: profile?.role || null,
+    role: profile?.role || user?.user_metadata?.role || null,
     login,
     signup,
     logout,

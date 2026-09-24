@@ -24,7 +24,7 @@ export default function PatientOnboarding() {
     setIsLoading(true);
     
     try {
-      const result = await completeOnboarding(formData);
+      const result = await completeOnboarding(formData, 'patient');
       if (!result.success) throw result.error;
       
       navigate('/');

@@ -1,7 +1,10 @@
 import { request } from './apiClient';
 
 export const checkinService = {
-  async getQuestions() {
+  async getQuestions(appointmentId) {
+    if (appointmentId) {
+      return request(`/questionnaire/appointment/${appointmentId}`);
+    }
     return request('/questionnaire/templates');
   },
 

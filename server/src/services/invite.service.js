@@ -52,6 +52,7 @@ async function createAndSendInvite({ appointmentId, patientEmail, patientFullNam
     });
   } catch (emailErr) {
     console.warn('[Invite Email Notice]: Could not send email via SMTP, but invite token was generated successfully:', emailErr.message);
+    console.warn('=> Test Invite Link:', inviteLink);
   }
 
   return invite;

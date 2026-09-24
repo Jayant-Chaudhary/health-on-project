@@ -3,14 +3,22 @@ import { request } from './apiClient.js';
 /** Patients in the clinician's queue, for the sidebar and search. */
 export async function fetchPatients() {
   const appointments = await request('/appointments');
-  return appointments.map((appointment) => ({
-    id: appointment.patient_id,
-    name: appointment.patient?.full_name ?? 'Unknown patient',
-    mrn: appointment.patient?.mrn ?? '',
-    gestationalDays: appointment.patient?.gestational_days ?? null,
-    acuity: appointment.acuity ?? 'optimal',
-    appointmentId: appointment.id,
-  }));
+  return appointments.map((appointment) => {
+    // If the patient hasn't registered yet, their profile is null. Use the invite email.
+    const invites = appointment.appointment_invites || [];
+    const invite = Array.isArray(invites) ? invites[0] : invites; // supabase might return array or single depending on relation
+    
+    return {
+      id: appointment.patient_id || `invite-${appointment.id}`, // fallback id for UI keys
+      name: appointment.patient?.full_name ?? (invite?.patient_email || 'Invited Patient'),
+      mrn: appointment.patient?.mrn ?? '',
+      gestationalDays: appointment.patient?.gestational_days ?? null,
+      acuity: appointment.acuity ?? 'optimal',
+      appointmentId: appointment.id,
+      scheduledAt: appointment.scheduled_at,
+      status: appointment.status,
+    };
+  });
 }
 
 /**
@@ -19,16 +27,33 @@ export async function fetchPatients() {
  * components consume.
  */
 export async function fetchPatientDashboard(patientId, appointmentId) {
+  const labReportsPromise = patientId?.startsWith('invite-')
+    ? Promise.resolve([])
+    : request(`/lab-reports?patientId=${patientId}`);
+
   const [appointment, responses, reports, checklist, postVisit] = await Promise.all([
     request(`/appointments/${appointmentId}`),
     request(`/questionnaire/responses/${appointmentId}`),
-    request(`/lab-reports?patientId=${patientId}`),
+    labReportsPromise,
     request(`/checklist/${appointmentId}`),
     request(`/post-visit/${appointmentId}`),
   ]);
 
+  const patientData = appointment.patient || {
+    id: patientId,
+    name: appointment.appointment_invites?.[0]?.patient_email || appointment.appointment_invites?.patient_email || 'Invited Patient',
+    acuity: 'optimal',
+    mrn: 'Pending Registration',
+    age: '—',
+    gravida: '—',
+    para: '—',
+    bloodType: '—',
+    gestationalDays: null,
+    dueDate: null,
+  };
+
   return {
-    patient: appointment.patient,
+    patient: patientData,
     appointment,
     questionnaire: {
       submittedAt: responses[0]?.created_at ?? null,
@@ -82,6 +107,15 @@ export async function resolveTriageAlert(metricId, { standardKey, reviewedValue 
     body: { standardKey, reviewedValue },
   });
 }
+
+export async function createAppointment(payload) {
+  return request('/appointments', { method: 'POST', body: payload });
+}
+
+export async function getQuestionnaireTemplates() {
+  return request('/questionnaire/templates');
+}
+
 
 // ---------------------------------------------------------------------------
 // API → view-model helpers

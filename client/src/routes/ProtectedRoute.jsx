@@ -2,7 +2,7 @@ import { Navigate, useLocation } from 'react-router-dom';
 import { useAuthContext } from '../context/AuthContext';
 
 export default function ProtectedRoute({ children, allowIncomplete = false, requireVerifiedClinician = false }) {
-  const { session, loading, profile, role } = useAuthContext();
+  const { session, loading, profile, role, user } = useAuthContext();
   const location = useLocation();
 
   if (loading) {
@@ -17,16 +17,25 @@ export default function ProtectedRoute({ children, allowIncomplete = false, requ
     return <Navigate to="/login" replace />;
   }
 
+  const activeRole = role || profile?.role || user?.user_metadata?.role || 'patient';
+
   if (!allowIncomplete && (!profile || !profile.full_name)) {
-    const activeRole = role || profile?.role || 'patient';
-    if (activeRole === 'patient') {
-      return <Navigate to="/onboarding/patient" replace />;
-    } else if (activeRole === 'clinician') {
+    if (activeRole === 'clinician') {
       return <Navigate to="/onboarding/clinician" replace />;
+    } else {
+      return <Navigate to="/onboarding/patient" replace />;
     }
   }
 
-  if (requireVerifiedClinician && role === 'clinician') {
+  if (activeRole === 'clinician' && (location.pathname === '/' || location.pathname.startsWith('/checkin'))) {
+    return <Navigate to="/clinician" replace />;
+  }
+
+  if (activeRole === 'patient' && location.pathname.startsWith('/clinician')) {
+    return <Navigate to="/" replace />;
+  }
+
+  if (requireVerifiedClinician && activeRole === 'clinician') {
     if (profile?.clinicianDetails?.is_verified === false) {
       return <Navigate to="/verification-pending" replace />;
     }

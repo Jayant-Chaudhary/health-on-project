@@ -9,29 +9,32 @@ export default function ActionBanner() {
 
   if (!appointment) return null;
 
-  const { status, startsAt, doctor, clinic } = appointment;
-  const appointmentDate = new Date(startsAt);
+  const status = appointment.status;
+  const appointmentDate = new Date(appointment.scheduled_at || appointment.startsAt || new Date());
   const daysUntil = differenceInDays(appointmentDate, new Date());
+  
+  const doctorName = appointment.clinician?.full_name || appointment.doctor?.name || 'Your Doctor';
+  const clinicName = appointment.clinic?.name || 'Maternal Care Clinic';
   
   const getBannerContent = () => {
     switch (status) {
-      case 'SCHEDULED':
+      case 'invited':
         return {
           bg: 'bg-primary-light',
-          title: `Your appointment is in ${daysUntil} days`,
-          subtitle: "0 of 2 steps done",
+          title: `You have an upcoming appointment in ${daysUntil} days`,
+          subtitle: "Please complete your pre-visit questionnaire",
           btnText: "Start pre-visit check-in",
           btnAction: () => navigate('/checkin/symptoms')
         };
-      case 'CHECKIN_IN_PROGRESS':
+      case 'active':
         return {
           bg: 'bg-primary-light',
           title: `Your appointment is in ${daysUntil} days`,
-          subtitle: "1 of 2 steps done",
+          subtitle: "Check-in in progress",
           btnText: "Continue check-in",
-          btnAction: () => navigate('/checkin/symptoms') // Router logic will redirect to right step later
+          btnAction: () => navigate('/checkin/symptoms')
         };
-      case 'CHECKIN_COMPLETE':
+      case 'checked_in':
         return {
           bg: 'bg-success-light',
           title: "You're all set for your visit",
@@ -39,7 +42,7 @@ export default function ActionBanner() {
           btnText: "Add to calendar",
           btnAction: () => alert('Calendar download mock')
         };
-      case 'VISIT_COMPLETED':
+      case 'completed':
         return {
           bg: 'bg-canvas',
           border: 'border border-primary',
@@ -69,7 +72,7 @@ export default function ActionBanner() {
       
       <div className="bg-white/60 rounded-lg p-3 mb-4 space-y-1">
         <p className="text-sm font-bold text-ink">{format(appointmentDate, 'MMM d, yyyy · h:mm a')}</p>
-        <p className="text-xs text-ink-soft">{doctor.name} · {clinic.name}</p>
+        <p className="text-xs text-ink-soft">{doctorName} · {clinicName}</p>
       </div>
 
       <div className="flex flex-col sm:flex-row gap-3">

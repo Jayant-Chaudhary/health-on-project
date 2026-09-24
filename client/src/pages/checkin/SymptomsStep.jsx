@@ -16,12 +16,14 @@ export default function SymptomsStep() {
 
   useEffect(() => {
     async function load() {
-      const q = await checkinService.getQuestions();
-      setQuestions(q);
-      setLoading(false);
+      if (appointment) {
+        const q = await checkinService.getQuestions(appointment.id);
+        setQuestions(q);
+        setLoading(false);
+      }
     }
     load();
-  }, []);
+  }, [appointment]);
 
   const handleToggle = (questionId, value) => {
     setAnswers(prev => ({
@@ -68,7 +70,7 @@ export default function SymptomsStep() {
           const ans = answers[q.id];
           return (
             <Card key={q.id} className="p-5">
-              <h3 className="font-bold text-lg text-ink mb-4 leading-tight">{q.text}</h3>
+              <h3 className="font-bold text-lg text-ink mb-4 leading-tight">{q.question_text || q.text}</h3>
               
               <div className="mb-4">
                 <YesNoToggle 

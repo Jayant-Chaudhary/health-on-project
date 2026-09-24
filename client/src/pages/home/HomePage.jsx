@@ -15,6 +15,9 @@ export default function HomePage() {
     return 'Good evening';
   };
 
+  const doctorName = appointment?.clinician?.full_name || appointment?.doctor?.name || 'Assigned Clinician';
+  const clinicName = appointment?.clinic?.name || 'Maternal Care Clinic';
+
   if (loading) {
     return (
       <div className="p-5 space-y-6">
@@ -31,14 +34,16 @@ export default function HomePage() {
       <header className="mb-8 flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold text-ink mb-2">
-            {getGreeting()}, {patient?.name.split(' ')[0]}
+            {getGreeting()}, {patient?.name ? patient.name.split(' ')[0] : 'there'}
           </h1>
-          <div className="inline-flex items-center px-3 py-1 bg-primary-light text-primary-dark text-sm font-bold rounded-full">
-            {patient?.gestationWeeks} weeks · Trimester {patient?.trimester}
-          </div>
+          {patient?.gestationWeeks != null && (
+            <div className="inline-flex items-center px-3 py-1 bg-primary-light text-primary-dark text-sm font-bold rounded-full">
+              {patient.gestationWeeks} weeks · Trimester {patient.trimester ?? 1}
+            </div>
+          )}
         </div>
         <div className="w-16 h-16 bg-primary text-white rounded-full flex items-center justify-center font-bold text-2xl shadow-sm">
-          {patient?.name.charAt(0)}
+          {patient?.name ? patient.name.charAt(0) : 'U'}
         </div>
       </header>
 
@@ -52,20 +57,24 @@ export default function HomePage() {
             <span className="text-xl">🏥</span>
           </div>
           <div>
-            <h3 className="font-bold text-ink">{appointment?.doctor.name}</h3>
-            <p className="text-sm text-ink-soft">{appointment?.clinic.name}</p>
+            <h3 className="font-bold text-ink">{doctorName}</h3>
+            <p className="text-sm text-ink-soft">{clinicName}</p>
           </div>
         </div>
         
         <div className="space-y-3 pt-4 border-t border-ink-soft/10">
-          <a href={appointment?.clinic.mapsUrl} target="_blank" rel="noreferrer" className="flex items-center gap-3 text-sm text-ink font-medium hover:text-primary transition-colors">
-            <MapPin className="text-primary" size={18} />
-            <span>Get directions</span>
-          </a>
-          <a href={`tel:${appointment?.clinic.phone}`} className="flex items-center gap-3 text-sm text-ink font-medium hover:text-primary transition-colors">
-            <Phone className="text-primary" size={18} />
-            <span>Call clinic</span>
-          </a>
+          {appointment?.clinic?.mapsUrl && (
+            <a href={appointment.clinic.mapsUrl} target="_blank" rel="noreferrer" className="flex items-center gap-3 text-sm text-ink font-medium hover:text-primary transition-colors">
+              <MapPin className="text-primary" size={18} />
+              <span>Get directions</span>
+            </a>
+          )}
+          {appointment?.clinic?.phone && (
+            <a href={`tel:${appointment.clinic.phone}`} className="flex items-center gap-3 text-sm text-ink font-medium hover:text-primary transition-colors">
+              <Phone className="text-primary" size={18} />
+              <span>Call clinic</span>
+            </a>
+          )}
         </div>
       </Card>
       </div>

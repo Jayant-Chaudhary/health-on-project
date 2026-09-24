@@ -79,6 +79,38 @@ async function acceptInvite(req, res, next) {
 }
 
 /**
+ * @desc   Get details of an invite token (e.g. email)
+ * @route  GET /auth/invite/:token
+ */
+async function getInviteDetails(req, res, next) {
+  try {
+    const { token } = req.params;
+
+    const { data: invite, error } = await supabaseAdmin
+      .from('appointment_invites')
+      .select('patient_email, used_at, expires_at')
+      .eq('token', token)
+      .single();
+
+    if (error || !invite) {
+      return res.status(404).json({ error: 'Invite link is invalid or expired' });
+    }
+
+    if (invite.used_at) {
+      return res.status(410).json({ error: 'This invite has already been used' });
+    }
+
+    if (new Date(invite.expires_at) < new Date()) {
+      return res.status(410).json({ error: 'This invite has expired' });
+    }
+
+    res.status(200).json({ email: invite.patient_email });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
  * @desc   Register a user directly (Patient/Clinician)
  * @route  POST /auth/signup
  */
@@ -178,4 +210,4 @@ async function getMe(req, res) {
   res.status(200).json({ user: req.user });
 }
 
-module.exports = { acceptInvite, signup, login, logout, getMe };
+module.exports = { acceptInvite, signup, login, logout, getMe, getInviteDetails };

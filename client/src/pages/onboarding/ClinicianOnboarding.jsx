@@ -27,7 +27,7 @@ export default function ClinicianOnboarding() {
     setIsLoading(true);
     
     try {
-      const result = await completeOnboarding(formData);
+      const result = await completeOnboarding(formData, 'clinician');
       if (!result.success) throw result.error;
       
       // Redirect to the pending verification screen or dashboard

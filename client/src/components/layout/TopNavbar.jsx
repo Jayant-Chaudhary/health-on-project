@@ -14,16 +14,15 @@ export default function TopNavbar() {
     navigate('/login');
   };
   
-  const showBadge = appointment?.status === 'SCHEDULED' || appointment?.status === 'CHECKIN_IN_PROGRESS';
+  const showBadge = appointment?.status === 'invited' || appointment?.status === 'active';
 
   const navItems = [
-    { to: "/", icon: Home, label: "Dashboard" },
+    { to: "/", icon: Home, label: "Dashboard", badge: showBadge },
     { to: "/reports", icon: FileText, label: "Lab Reports" },
     { 
       to: "/summary", 
       icon: ClipboardList, 
-      label: "Visit Summary",
-      badge: showBadge
+      label: "Visit Summary"
     }
   ];
 

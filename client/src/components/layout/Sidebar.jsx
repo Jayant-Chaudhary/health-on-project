@@ -85,7 +85,7 @@ export function Sidebar({ collapsed, onToggle, clinicianName = 'Dr. E. Rostova',
       </nav>
 
       <div className={`border-t border-line p-3 ${collapsed ? 'flex justify-center' : ''}`}>
-        <div className="flex items-center gap-3">
+        <NavLink to="/clinician/profile" className="flex items-center gap-3 rounded-xl p-2 transition-colors hover:bg-line/50">
           <Avatar name={clinicianName} size="sm" tone="cypress" />
           {!collapsed && (
             <div className="min-w-0 flex-1">
@@ -93,7 +93,7 @@ export function Sidebar({ collapsed, onToggle, clinicianName = 'Dr. E. Rostova',
               <p className="truncate text-body-sm text-ink-3">{clinicianRole}</p>
             </div>
           )}
-        </div>
+        </NavLink>
       </div>
     </aside>
   );

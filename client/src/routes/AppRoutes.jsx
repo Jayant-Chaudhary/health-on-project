@@ -16,11 +16,14 @@ import CheckinDonePage from '../pages/checkin/CheckinDonePage';
 // Auth Pages
 import LoginPage from '../pages/auth/LoginPage';
 import SignupPage from '../pages/auth/SignupPage';
+import InvitePage from '../pages/auth/InvitePage';
 
 // Clinician Pages
 import { ClinicianDashboard } from '../pages/clinician/ClinicianDashboard.jsx';
+import { ClinicianSchedule } from '../pages/clinician/ClinicianSchedule.jsx';
 import { ComingSoon } from '../pages/clinician/ComingSoon.jsx';
 import VerificationPending from '../pages/clinician/VerificationPending.jsx';
+import { ClinicianProfile } from '../pages/clinician/ClinicianProfile.jsx';
 
 // Onboarding Pages
 import PatientOnboarding from '../pages/onboarding/PatientOnboarding.jsx';
@@ -34,7 +37,7 @@ export function AppRoutes() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<SignupPage />} />
       </Route>
-      <Route path="/invite/:token" element={<div>Invite Placeholder</div>} />
+      <Route path="/invite/:token" element={<InvitePage />} />
 
       {/* Onboarding Routes */}
       <Route path="/onboarding/patient" element={<ProtectedRoute allowIncomplete><PatientOnboarding /></ProtectedRoute>} />
@@ -58,10 +61,11 @@ export function AppRoutes() {
 
       {/* Clinician Routes */}
       <Route path="/clinician" element={<ProtectedRoute requireVerifiedClinician><ClinicianDashboard /></ProtectedRoute>} />
-      <Route path="/clinician/schedule" element={<ProtectedRoute requireVerifiedClinician><ComingSoon title="Schedule" icon="calendar" /></ProtectedRoute>} />
+      <Route path="/clinician/schedule" element={<ProtectedRoute requireVerifiedClinician><ClinicianSchedule /></ProtectedRoute>} />
       <Route path="/clinician/patients" element={<ProtectedRoute requireVerifiedClinician><ComingSoon title="Patients" icon="users" /></ProtectedRoute>} />
       <Route path="/clinician/lab-inbox" element={<ProtectedRoute requireVerifiedClinician><ComingSoon title="Lab Inbox" icon="flask" /></ProtectedRoute>} />
       <Route path="/clinician/analytics" element={<ProtectedRoute requireVerifiedClinician><ComingSoon title="Analytics" icon="chart" /></ProtectedRoute>} />
+      <Route path="/clinician/profile" element={<ProtectedRoute requireVerifiedClinician><ClinicianProfile /></ProtectedRoute>} />
       
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
