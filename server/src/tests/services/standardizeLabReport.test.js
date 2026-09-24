@@ -1,102 +1,289 @@
-// 1. MOCK EXTERNAL DEPENDENCIES
-// We mock the Supabase client to simulate a chained query: .from().select().eq()
+﻿/**
+ * Unit tests for standardizeLabReport.service.js
+ *
+ * The module exposes several pure helpers (normalizeKey, tokenSortKey,
+ * buildTokenSortIndex, findDictionaryEntry) alongside the async
+ * standardizeMetrics pipeline. All supabase I/O is mocked.
+ *
+ * Cache isolation: the module holds process-level singleton caches
+ * (dictionaryCache, dictionaryCacheAt). We reset them between tests
+ * by calling jest.resetModules() and re-requiring the module.
+ */
+
 jest.mock('../../config/supabaseAdminClient', () => ({
-  from: jest.fn().mockReturnThis(),
-  select: jest.fn().mockReturnThis(),
-  eq: jest.fn().mockResolvedValue({ data: [], error: null }), // Default empty dictionary
+  from: jest.fn(),
 }));
 
-// We mock env so we don't need a real .env file
+// We mock env so the confidence threshold is deterministic regardless of
+// whatever .env file exists on the developer's machine.
 jest.mock('../../config/env', () => ({
-  ocrMetricReviewThreshold: 0.8, // Set a fixed threshold for testing
+  ocrMetricReviewThreshold: 0.75,
 }));
 
-// We mock the unit conversion service so we isolate the standardization logic
-jest.mock('../../services/standardization/unitConversion.service', () => ({
-  convertUnit: jest.fn((value, from, to) => {
-    // A simple mock: if from and to are different, just multiply by 2
-    if (from && to && from !== to) return { value: value * 2, converted: true };
-    return { value, converted: true };
-  }),
-}));
+// ─── Helpers re-imported per test group that needs cache isolation ────────────
+// For pure-function tests we can import once at the top.
+const {
+  normalizeKey,
+  tokenSortKey,
+  buildTokenSortIndex,
+  findDictionaryEntry,
+} = require('../../services/standardization/standardizeLabReport.service');
 
 const supabaseAdmin = require('../../config/supabaseAdminClient');
-const { standardizeMetrics, loadDictionary } = require('../../services/standardization/standardizeLabReport.service');
 
-describe('Standardize Lab Report Service', () => {
-  // A fake dictionary to simulate what Supabase would return
-  const mockDictionary = [
-    {
-      standard_key: 'hemoglobin',
-      display_name: 'Hemoglobin',
-      category: 'blood',
-      unit_standard: 'g/dl',
-      aliases: ['hb', 'hgb'],
-    },
+// Helper: build a minimal supabase mock that resolves with the given dictionary
+function mockDictionary(entries) {
+  supabaseAdmin.from.mockReturnValue({
+    select: jest.fn().mockReturnThis(),
+    eq: jest.fn().mockResolvedValue({ data: entries, error: null }),
+  });
+}
+
+// Helper: build a minimal supabase mock that rejects with an error
+function mockDictionaryError(message) {
+  supabaseAdmin.from.mockReturnValue({
+    select: jest.fn().mockReturnThis(),
+    eq: jest.fn().mockResolvedValue({ data: null, error: { message } }),
+  });
+}
+
+// ─── Pure helper tests ────────────────────────────────────────────────────────
+
+describe('normalizeKey', () => {
+  it('lowercases the key', () => {
+    expect(normalizeKey('Hemoglobin')).toBe('hemoglobin');
+  });
+
+  it('strips non-alphanumeric characters', () => {
+    expect(normalizeKey('HbA1c (%)')).toBe('hba1c');
+  });
+
+  it('trims leading and trailing whitespace', () => {
+    expect(normalizeKey('  glucose  ')).toBe('glucose');
+  });
+
+  it('handles an already-normalised key', () => {
+    expect(normalizeKey('glucose')).toBe('glucose');
+  });
+});
+
+describe('tokenSortKey', () => {
+  it('"Glucose Fasting" and "Fasting Glucose" produce the same token', () => {
+    expect(tokenSortKey('Glucose Fasting')).toBe(tokenSortKey('Fasting Glucose'));
+  });
+
+  it('does NOT collapse "Testosterone, Total" onto "Testosterone, Free"', () => {
+    expect(tokenSortKey('Testosterone, Total')).not.toBe(tokenSortKey('Testosterone, Free'));
+  });
+
+  it('lowercases and strips punctuation before sorting', () => {
+    expect(tokenSortKey('  Blood, Glucose ')).toBe(tokenSortKey('glucose blood'));
+  });
+});
+
+describe('buildTokenSortIndex', () => {
+  it('maps a standard_key spelling to itself', () => {
+    const dict = [{ standard_key: 'hemoglobin', aliases: [] }];
+    const index = buildTokenSortIndex(dict);
+    expect(index.get(tokenSortKey('hemoglobin'))).toBe('hemoglobin');
+  });
+
+  it('maps an alias to the standard_key', () => {
+    const dict = [{ standard_key: 'hemoglobin', aliases: ['HB', 'Hgb'] }];
+    const index = buildTokenSortIndex(dict);
+    expect(index.get(tokenSortKey('HB'))).toBe('hemoglobin');
+    expect(index.get(tokenSortKey('Hgb'))).toBe('hemoglobin');
+  });
+
+  it('drops an ambiguous token that maps to two different standard_keys', () => {
+    const dict = [
+      { standard_key: 'glucose_fasting', aliases: ['fasting glucose'] },
+      { standard_key: 'glucose_random', aliases: ['fasting glucose'] }, // same alias!
+    ];
+    const index = buildTokenSortIndex(dict);
+    // The token for "fasting glucose" is ambiguous — it must be dropped.
+    expect(index.has(tokenSortKey('fasting glucose'))).toBe(false);
+  });
+
+  it('returns an empty Map for an empty dictionary', () => {
+    expect(buildTokenSortIndex([])).toEqual(new Map());
+  });
+});
+
+describe('findDictionaryEntry', () => {
+  const dict = [
+    { standard_key: 'hemoglobin', aliases: ['Hb', 'Hgb'], unit_standard: 'g/dl' },
+    { standard_key: 'glucose_fasting', aliases: ['Fasting Glucose', 'Blood Glucose Fasting'], unit_standard: 'mg/dl' },
   ];
+  const index = buildTokenSortIndex(dict);
+
+  it('returns the entry on an exact standard_key match', () => {
+    expect(findDictionaryEntry(dict, 'hemoglobin', index)).toMatchObject({ standard_key: 'hemoglobin' });
+  });
+
+  it('returns the entry on a case-insensitive standard_key match', () => {
+    expect(findDictionaryEntry(dict, 'HEMOGLOBIN', index)).toMatchObject({ standard_key: 'hemoglobin' });
+  });
+
+  it('returns the entry via alias', () => {
+    expect(findDictionaryEntry(dict, 'Hgb', index)).toMatchObject({ standard_key: 'hemoglobin' });
+  });
+
+  it('returns the entry via token-sort fallback (word-order variant)', () => {
+    // "Glucose Fasting" is a word-order variant of "Fasting Glucose" (an alias)
+    expect(findDictionaryEntry(dict, 'Glucose Fasting', index)).toMatchObject({
+      standard_key: 'glucose_fasting',
+    });
+  });
+
+  it('returns undefined when no match is found', () => {
+    expect(findDictionaryEntry(dict, 'completely_unknown_metric', index)).toBeUndefined();
+  });
+});
+
+// ─── standardizeMetrics (async pipeline) ─────────────────────────────────────
+
+describe('standardizeMetrics', () => {
+  // Re-require per describe block to reset the module-level cache.
+  let standardizeMetrics;
 
   beforeEach(() => {
-    jest.clearAllMocks();
-    // Reset the Supabase mock to return our fake dictionary
-    supabaseAdmin.eq.mockResolvedValue({ data: mockDictionary, error: null });
+    jest.resetModules();
+    // Re-mock after resetModules wipes the registry.
+    jest.mock('../../config/supabaseAdminClient', () => ({ from: jest.fn() }));
+    jest.mock('../../config/env', () => ({ ocrMetricReviewThreshold: 0.75 }));
+    ({ standardizeMetrics } = require('../../services/standardization/standardizeLabReport.service'));
+    // Re-get the fresh supabase mock reference.
+    const freshSupabase = require('../../config/supabaseAdminClient');
+    mockDictionaryVia(freshSupabase);
   });
 
-  // 2. TEST THE CORE LOGIC
-  describe('standardizeMetrics()', () => {
-    
-    it('should match an exact standard_key', async () => {
-      const rawMetrics = [{ key: 'hemoglobin', value: 15, unit: 'g/l', confidence: 0.9 }];
-      const result = await standardizeMetrics(rawMetrics);
-
-      expect(result[0].standard_key).toBe('hemoglobin');
-      expect(result[0].needs_review).toBe(false);
-      // Because we mocked convertUnit to multiply by 2 (since g/l !== g/dl)
-      expect(result[0].parsed_value).toBe(30); 
+  // We need a helper that uses the freshly-required supabase mock.
+  function mockDictionaryVia(supabase, entries) {
+    const dict = entries ?? [
+      { standard_key: 'hemoglobin', aliases: ['Hb', 'Hgb'], unit_standard: 'g/dl', display_name: 'Haemoglobin', category: 'CBC' },
+      { standard_key: 'glucose_fasting', aliases: ['Fasting Glucose'], unit_standard: 'mg/dl', display_name: 'Fasting Glucose', category: 'Metabolic' },
+    ];
+    supabase.from.mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      eq: jest.fn().mockResolvedValue({ data: dict, error: null }),
     });
+  }
 
-    it('should match an alias (e.g., hb)', async () => {
-      const rawMetrics = [{ key: 'hb', value: 15, unit: 'g/l', confidence: 0.9 }];
-      const result = await standardizeMetrics(rawMetrics);
+  it('returns an empty array for empty input', async () => {
+    await expect(standardizeMetrics([])).resolves.toEqual([]);
+  });
 
-      expect(result[0].standard_key).toBe('hemoglobin');
-      expect(result[0].needs_review).toBe(false);
-    });
-
-    it('should flag as needs_review if confidence is below threshold', async () => {
-      const rawMetrics = [{ key: 'hemoglobin', value: 15, unit: 'g/l', confidence: 0.5 }];
-      const result = await standardizeMetrics(rawMetrics);
-
-      expect(result[0].standard_key).toBe('hemoglobin');
-      expect(result[0].needs_review).toBe(true); // 0.5 < 0.8
-    });
-
-    it('should flag as needs_review if key is unmapped', async () => {
-      const rawMetrics = [{ key: 'unknown_metric', value: 10, unit: 'mg', confidence: 0.9 }];
-      const result = await standardizeMetrics(rawMetrics);
-
-      expect(result[0].standard_key).toBeNull();
-      expect(result[0].needs_review).toBe(true);
-    });
-
-    it('should flag as needs_review if value is not numeric', async () => {
-      const rawMetrics = [{ key: 'hemoglobin', value: 'invalid-string', unit: 'g/l', confidence: 0.9 }];
-      const result = await standardizeMetrics(rawMetrics);
-
-      expect(result[0].parsed_value).toBeNull();
-      expect(result[0].needs_review).toBe(true);
+  it('standardizes a known metric with matching units (no conversion needed)', async () => {
+    const result = await standardizeMetrics([
+      { key: 'Hb', value: 12.5, unit: 'g/dl', confidence: 0.95 },
+    ]);
+    expect(result[0]).toMatchObject({
+      standard_key: 'hemoglobin',
+      raw_key: 'Hb',
+      raw_value: '12.5',
+      parsed_value: 12.5,
+      unit_raw: 'g/dl',
+      unit_standard: 'g/dl',
+      confidence_score: 0.95,
+      needs_review: false,
     });
   });
 
-  describe('loadDictionary() error handling', () => {
-    it('should throw an error if database query fails', async () => {
-      // Fast-forward time to bypass the in-memory cache
-      jest.spyOn(Date, 'now').mockReturnValue(Date.now() + 100000);
-      supabaseAdmin.eq.mockResolvedValueOnce({ data: null, error: { message: 'DB connection failed' } });
-      
-      const rawMetrics = [{ key: 'hb', value: 15, unit: 'g/l', confidence: 0.9 }];
-      await expect(standardizeMetrics(rawMetrics)).rejects.toThrow('Failed to load metric_dictionary: DB connection failed');
-      
-      jest.restoreAllMocks();
+  it('converts units when raw unit differs from standard unit', async () => {
+    // hemoglobin standard is g/dl; input is g/l (needs divide by 10)
+    const result = await standardizeMetrics([
+      { key: 'hemoglobin', value: 120, unit: 'g/l', confidence: 0.9 },
+    ]);
+    expect(result[0].standard_key).toBe('hemoglobin');
+    expect(result[0].parsed_value).toBeCloseTo(12, 5);
+    expect(result[0].needs_review).toBe(false);
+  });
+
+  it('sets needs_review: true when unit conversion fails', async () => {
+    // Input unit "lb" cannot be converted to "g/dl"
+    const result = await standardizeMetrics([
+      { key: 'hemoglobin', value: 12, unit: 'lb', confidence: 0.9 },
+    ]);
+    expect(result[0].standard_key).toBe('hemoglobin');
+    expect(result[0].needs_review).toBe(true);
+  });
+
+  it('sets needs_review: true when confidence is below threshold (0.75)', async () => {
+    const result = await standardizeMetrics([
+      { key: 'hemoglobin', value: 12, unit: 'g/dl', confidence: 0.6 },
+    ]);
+    expect(result[0].needs_review).toBe(true);
+  });
+
+  it('does NOT set needs_review for confidence exactly at threshold', async () => {
+    // confidence === threshold → NOT below → should not flag
+    const result = await standardizeMetrics([
+      { key: 'hemoglobin', value: 12, unit: 'g/dl', confidence: 0.75 },
+    ]);
+    expect(result[0].needs_review).toBe(false);
+  });
+
+  it('sets needs_review: true and parsed_value: null for non-numeric value', async () => {
+    const result = await standardizeMetrics([
+      { key: 'hemoglobin', value: 'see report', unit: 'g/dl', confidence: 0.9 },
+    ]);
+    expect(result[0].needs_review).toBe(true);
+    expect(result[0].parsed_value).toBeNull();
+  });
+
+  it('sets standard_key: null and needs_review: true for an unknown metric key', async () => {
+    const result = await standardizeMetrics([
+      { key: 'unknown_analyte_xyz', value: 42, unit: 'mg/dl', confidence: 0.9 },
+    ]);
+    expect(result[0]).toMatchObject({
+      standard_key: null,
+      needs_review: true,
+      raw_key: 'unknown_analyte_xyz',
     });
+  });
+
+  it('does not set needs_review when confidence is absent (null/undefined)', async () => {
+    // No confidence score → belowConfidenceThreshold check is skipped
+    const result = await standardizeMetrics([
+      { key: 'hemoglobin', value: 12, unit: 'g/dl' }, // no confidence field
+    ]);
+    expect(result[0].confidence_score).toBeNull();
+    expect(result[0].needs_review).toBe(false);
+  });
+
+  // --- Defensive: malformed input entries (Caveat 6 from the debate) ---
+
+  it('does not crash when a metric entry has a null value', async () => {
+    const result = await standardizeMetrics([
+      { key: 'hemoglobin', value: null, unit: 'g/dl', confidence: 0.9 },
+    ]);
+    expect(result[0].needs_review).toBe(true);
+    expect(result[0].parsed_value).toBeNull();
+  });
+
+  // --- loadDictionary error propagation ---
+
+  it('throws when supabase returns an error loading the dictionary', async () => {
+    const freshSupabase = require('../../config/supabaseAdminClient');
+    freshSupabase.from.mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      eq: jest.fn().mockResolvedValue({ data: null, error: { message: 'DB unavailable' } }),
+    });
+
+    await expect(standardizeMetrics([{ key: 'hemoglobin', value: 12, unit: 'g/dl' }]))
+      .rejects.toThrow('Failed to load metric_dictionary: DB unavailable');
+  });
+
+  // --- Cache behaviour ---
+
+  it('does not call supabase a second time within the cache TTL', async () => {
+    const freshSupabase = require('../../config/supabaseAdminClient');
+
+    await standardizeMetrics([{ key: 'hemoglobin', value: 12, unit: 'g/dl' }]);
+    await standardizeMetrics([{ key: 'hemoglobin', value: 13, unit: 'g/dl' }]);
+
+    // supabase.from should have been called only once (first load)
+    expect(freshSupabase.from).toHaveBeenCalledTimes(1);
   });
 });
