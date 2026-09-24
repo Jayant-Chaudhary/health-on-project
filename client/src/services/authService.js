@@ -1,7 +1,35 @@
 import { supabase } from './supabaseClient.js';
+import { request } from './apiClient.js';
 
+export async function acceptInvite(token, password) {
+  return request('/auth/accept-invite', {
+    method: 'POST',
+    body: { token, password },
+  });
+}
 
-export async function signUpUser({ email, password, role = 'patient' }) {
+export async function getInviteDetails(token) {
+  return request(`/auth/invite/${token}`);
+}
+
+export async function signUpUser(param1, param2, param3) {
+  let email, password, role;
+  if (typeof param1 === 'string') {
+    email = param1;
+    password = param2;
+    role = param3 || 'patient';
+  } else if (param1 && typeof param1 === 'object') {
+    if (typeof param1.email === 'object' && param1.email?.email) {
+      email = param1.email.email;
+      password = param1.email.password || param1.password;
+      role = param1.email.role || param1.role || 'patient';
+    } else {
+      email = param1.email;
+      password = param1.password;
+      role = param1.role || 'patient';
+    }
+  }
+
   try {
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email,
@@ -58,7 +86,21 @@ export async function signUpUser({ email, password, role = 'patient' }) {
   }
 }
 
-export async function signInUser({ email, password }) {
+export async function signInUser(param1, param2) {
+  let email, password;
+  if (typeof param1 === 'string') {
+    email = param1;
+    password = param2;
+  } else if (param1 && typeof param1 === 'object') {
+    if (typeof param1.email === 'object' && param1.email?.email) {
+      email = param1.email.email;
+      password = param1.email.password || param1.password;
+    } else {
+      email = param1.email;
+      password = param1.password;
+    }
+  }
+
   try {
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
@@ -108,9 +150,13 @@ export async function fetchProfile(userId) {
       .select('*, clinician_details(*), patient_details(*)')
       .eq('id', userId)
       .single();
-    if (error) {
-      console.error('[fetchProfile Error]:', error.message);
-      return null;
+
+    const { data: { session } } = await supabase.auth.getSession();
+    const userMetaRole = session?.user?.user_metadata?.role;
+
+    if (error || !profile) {
+      console.warn('[fetchProfile Warning]:', error?.message || 'Profile record not found in DB');
+      return { id: userId, role: userMetaRole || 'patient' };
     }
     
     // Flatten for convenience if needed, but keeping nested is fine too
@@ -119,6 +165,10 @@ export async function fetchProfile(userId) {
     }
     if (profile.patient_details && profile.patient_details.length > 0) {
       profile.patientDetails = profile.patient_details[0];
+    }
+
+    if (userMetaRole) {
+      profile.role = userMetaRole;
     }
     
     return profile;
@@ -130,29 +180,36 @@ export async function fetchProfile(userId) {
 
 export async function completeOnboarding(userId, role, details) {
   try {
-    // 1. Update basic profile
+    // 1. Update basic profile using upsert in case it doesn't exist
     const { error: profileError } = await supabase
       .from('profiles')
-      .update({
+      .upsert({
+        id: userId,
+        role: role,
         full_name: details.fullName,
         phone: details.phone
-      })
-      .eq('id', userId);
+      });
 
     if (profileError) throw profileError;
 
     // 2. Update specific details
     if (role === 'patient') {
-      // Add any specific patient updates if needed
+      const { error: patientError } = await supabase
+        .from('patient_details')
+        .upsert({
+          profile_id: userId
+        });
+      if (patientError) throw patientError;
     } else if (role === 'clinician') {
       const { error: clinicianError } = await supabase
         .from('clinician_details')
-        .update({
+        .upsert({
+          profile_id: userId,
           specialty: details.specialty,
           license_number: details.licenseNumber,
-          state_medical_council: details.stateMedicalCouncil
-        })
-        .eq('profile_id', userId);
+          state_medical_council: details.stateMedicalCouncil,
+          is_verified: false
+        });
         
       if (clinicianError) throw clinicianError;
     }

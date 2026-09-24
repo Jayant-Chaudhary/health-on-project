@@ -11,11 +11,11 @@ const questionnaireRoutes = require('./routes/questionnaire.routes');
 const labReportsRoutes = require('./routes/labReports.routes');
 const checklistRoutes = require('./routes/checklist.routes');
 const postVisitRoutes = require('./routes/postVisit.routes');
-const ocrRoutes = require('./routes/ocr.routes');
+const profileRoutes = require('./routes/profile.routes');
 
 const app = express();
 
-app.use(cors({ origin: env.clientAppUrl, credentials: true }));
+app.use(cors({ origin: [env.clientAppUrl, 'http://localhost:5173', 'http://localhost:3000'], credentials: true }));
 app.use(express.json({ limit: '5mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
@@ -24,14 +24,14 @@ app.use(cookieParser());
 app.get('/health', (req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() }));
 
 // API Resource Endpoints
-app.use('/auth', authRoutes);
-app.use('/appointments', appointmentsRoutes);
-app.use('/vitals', vitalsRoutes);
-app.use('/questionnaire', questionnaireRoutes);
-app.use(['/api/lab-reports', '/lab-reports'], labReportsRoutes);
-app.use('/checklist', checklistRoutes);
-app.use('/post-visit', postVisitRoutes);
-app.use('/ocr', ocrRoutes);
+app.use('/api/auth', authRoutes);
+app.use('/api/appointments', appointmentsRoutes);
+app.use('/api/vitals', vitalsRoutes);
+app.use('/api/questionnaire', questionnaireRoutes);
+app.use('/api/lab-reports', labReportsRoutes);
+app.use('/api/checklist', checklistRoutes);
+app.use('/api/post-visit', postVisitRoutes);
+app.use('/api/profile', profileRoutes);
 
 app.use((req, res) => res.status(404).json({ error: 'Endpoint not found' }));
 app.use(errorHandler);

@@ -44,7 +44,7 @@ describe('Auth API', () => {
       });
 
       const response = await request(app)
-        .post('/auth/signup')
+        .post('/api/auth/signup')
         .send(validSignupPayload);
 
       expect(response.status).toBe(201);
@@ -71,7 +71,7 @@ describe('Auth API', () => {
       });
 
       const response = await request(app)
-        .post('/auth/signup')
+        .post('/api/auth/signup')
         .send(validSignupPayload);
 
       expect(response.status).toBe(400);
@@ -80,7 +80,7 @@ describe('Auth API', () => {
 
     it('should return 400 for invalid payload', async () => {
       const response = await request(app)
-        .post('/auth/signup')
+        .post('/api/auth/signup')
         .send({ email: 'not-an-email' }); // Missing required fields
 
       expect(response.status).toBe(400);
@@ -114,7 +114,7 @@ describe('Auth API', () => {
       });
 
       const response = await request(app)
-        .post('/auth/login')
+        .post('/api/auth/login')
         .send(validLoginPayload);
 
       expect(response.status).toBe(200);
@@ -130,7 +130,7 @@ describe('Auth API', () => {
       });
 
       const response = await request(app)
-        .post('/auth/login')
+        .post('/api/auth/login')
         .send(validLoginPayload);
 
       expect(response.status).toBe(401);
@@ -141,7 +141,7 @@ describe('Auth API', () => {
   describe('GET /auth/me', () => {
     it('should return 401 if token is missing', async () => {
       const response = await request(app)
-        .get('/auth/me');
+        .get('/api/auth/me');
 
       expect(response.status).toBe(401);
       expect(response.body.error).toBe('Missing or invalid Authorization header');
@@ -167,7 +167,7 @@ describe('Auth API', () => {
       });
 
       const response = await request(app)
-        .get('/auth/me')
+        .get('/api/auth/me')
         .set('Authorization', 'Bearer valid-token');
 
       expect(response.status).toBe(200);

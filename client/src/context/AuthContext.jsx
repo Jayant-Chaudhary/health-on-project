@@ -46,21 +46,22 @@ export function AuthProvider({ children }) {
     return () => subscription.unsubscribe();
   }, []);
 
-  const login = async (credentials) => {
-    return await apiSignIn(credentials);
+  const login = async (...args) => {
+    return await apiSignIn(...args);
   };
 
-  const signup = async (payload) => {
-    return await apiSignUp(payload);
+  const signup = async (...args) => {
+    return await apiSignUp(...args);
   };
 
   const logout = async () => {
     return await apiSignOut();
   };
 
-  const completeOnboarding = async (details) => {
-    if (!user || !profile) return { success: false, error: new Error('User not loaded') };
-    const result = await apiCompleteOnboarding(user.id, profile.role, details);
+  const completeOnboarding = async (details, roleOverride) => {
+    if (!user) return { success: false, error: new Error('User not loaded') };
+    const activeRole = roleOverride || profile?.role || 'patient';
+    const result = await apiCompleteOnboarding(user.id, activeRole, details);
     if (result.success) {
       const updatedProfile = await fetchProfile(user.id);
       setProfile(updatedProfile);
@@ -73,7 +74,7 @@ export function AuthProvider({ children }) {
     profile,
     session,
     loading,
-    role: profile?.role || null,
+    role: profile?.role || user?.user_metadata?.role || null,
     login,
     signup,
     logout,

@@ -6,11 +6,53 @@ async function listTemplates(req, res, next) {
       .from('questionnaire_templates')
       .select('*')
       .eq('is_active', true)
+      .or(`clinician_id.is.null,clinician_id.eq.${req.user.id}`)
       .order('sort_order', { ascending: true });
 
     if (error) throw error;
 
     res.json(data);
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function getTemplatesForAppointment(req, res, next) {
+  try {
+    const { appointmentId } = req.params;
+    const { data, error } = await supabaseAdmin
+      .from('appointment_questionnaires')
+      .select('template_id, questionnaire_templates(*)')
+      .eq('appointment_id', appointmentId);
+      
+    if (error) throw error;
+    
+    // Flatten the result
+    const templates = data.map(d => d.questionnaire_templates);
+    res.json(templates);
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function createTemplate(req, res, next) {
+  try {
+    const { questionText } = req.body;
+    const clinicianId = req.user.id;
+
+    const { data, error } = await supabaseAdmin
+      .from('questionnaire_templates')
+      .insert({
+        question_text: questionText,
+        clinician_id: clinicianId,
+        is_active: true,
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    res.status(201).json(data);
   } catch (err) {
     next(err);
   }
@@ -55,4 +97,4 @@ async function getResponsesForAppointment(req, res, next) {
   }
 }
 
-module.exports = { listTemplates, submitResponses, getResponsesForAppointment };
+module.exports = { listTemplates, getTemplatesForAppointment, createTemplate, submitResponses, getResponsesForAppointment };

@@ -22,7 +22,7 @@ router.get('/', listAppointments);
 router.get('/:id', getAppointment);
 router.patch(
   '/:id/status',
-  roleGuard('clinician'),
+  roleGuard('clinician', 'patient'),
   validateBody(updateAppointmentStatusSchema),
   updateAppointmentStatus
 );

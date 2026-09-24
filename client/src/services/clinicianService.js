@@ -1,12 +1,23 @@
 import { request } from './apiClient.js';
 
+/** Create an appointment and invite the patient to it. */
+export async function createAppointment({ patientEmail, patientFullName, scheduledAt }) {
+  return request('/api/appointments', {
+    method: 'POST',
+    body: { patientEmail, patientFullName, scheduledAt },
+  });
+}
+
 /** Patients in the clinician's queue, for the sidebar and search. */
 export async function fetchPatients() {
-  const appointments = await request('/appointments');
+  const appointments = await request('/api/appointments');
 
   return appointments.map((appointment) => ({
     id: appointment.patient_id,
-    name: appointment.patient?.full_name ?? 'Unknown patient',
+    name: appointment.patient?.full_name ?? appointment.invited_email ?? 'Invited patient',
+    isPending: appointment.patient?.pending ?? !appointment.patient_id,
+    scheduledAt: appointment.scheduled_at,
+    status: appointment.status,
     mrn: appointment.patient?.mrn ?? '',
     gestationalDays: appointment.patient?.gestational_days ?? null,
     acuity: appointment.acuity ?? 'optimal',
@@ -20,16 +31,34 @@ export async function fetchPatients() {
  * components consume.
  */
 export async function fetchPatientDashboard(patientId, appointmentId) {
+  const labReportsPromise = patientId?.startsWith('invite-')
+    ? Promise.resolve([])
+    : request(`/lab-reports?patientId=${patientId}`);
+
   const [appointment, responses, reports, checklist, postVisit] = await Promise.all([
-    request(`/appointments/${appointmentId}`),
-    request(`/questionnaire/responses/${appointmentId}`),
-    request(`/lab-reports?patientId=${patientId}`),
-    request(`/checklist/${appointmentId}`),
-    request(`/post-visit/${appointmentId}`),
+    request(`/api/appointments/${appointmentId}`),
+    request(`/api/questionnaire/responses/${appointmentId}`),
+    // Only what the patient chose to share with this appointment.
+    request(`/api/lab-reports?patientId=${patientId}&appointmentId=${appointmentId}`),
+    request(`/api/checklist/${appointmentId}`),
+    request(`/api/post-visit/${appointmentId}`),
   ]);
 
+  const patientData = appointment.patient || {
+    id: patientId,
+    name: appointment.appointment_invites?.[0]?.patient_email || appointment.appointment_invites?.patient_email || 'Invited Patient',
+    acuity: 'optimal',
+    mrn: 'Pending Registration',
+    age: '—',
+    gravida: '—',
+    para: '—',
+    bloodType: '—',
+    gestationalDays: null,
+    dueDate: null,
+  };
+
   return {
-    patient: appointment.patient,
+    patient: patientData,
     appointment,
     questionnaire: {
       submittedAt: responses[0]?.created_at ?? null,
@@ -57,7 +86,7 @@ export async function fetchPatientDashboard(patientId, appointmentId) {
 
 /** Historical series for one metric, for the expanded row chart. */
 export async function fetchMetricTrend(standardKey, patientId) {
-  const rows = await request(`/lab-reports/trend/${standardKey}?patientId=${patientId}`);
+  const rows = await request(`/api/lab-reports/trend/${standardKey}?patientId=${patientId}`);
 
   return rows.map((row) => ({
     date: row.created_at,
@@ -66,24 +95,33 @@ export async function fetchMetricTrend(standardKey, patientId) {
 }
 
 export async function saveConsultancyNotes(appointmentId, notesText) {
-  return request(`/post-visit/${appointmentId}/notes`, { method: 'PUT', body: { notesText } });
+  return request(`/api/post-visit/${appointmentId}/notes`, { method: 'PUT', body: { notesText } });
 }
 
 export async function toggleChecklistItem(itemId, isCompleted) {
-  return request(`/checklist/items/${itemId}`, { method: 'PATCH', body: { isCompleted } });
+  return request(`/api/checklist/items/${itemId}`, { method: 'PATCH', body: { isCompleted } });
 }
 
 export async function addActionItem(appointmentId, label) {
-  return request(`/post-visit/${appointmentId}/action-items`, { method: 'POST', body: { label } });
+  return request(`/api/post-visit/${appointmentId}/action-items`, { method: 'POST', body: { label } });
 }
 
 /** Doctor types in a value the OCR pipeline could not read confidently. */
 export async function resolveTriageAlert(metricId, { standardKey, reviewedValue }) {
-  return request(`/lab-reports/metrics/${metricId}/review`, {
+  return request(`/api/lab-reports/metrics/${metricId}/review`, {
     method: 'PATCH',
     body: { standardKey, reviewedValue },
   });
 }
+
+export async function createAppointment(payload) {
+  return request('/appointments', { method: 'POST', body: payload });
+}
+
+export async function getQuestionnaireTemplates() {
+  return request('/questionnaire/templates');
+}
+
 
 // ---------------------------------------------------------------------------
 // API → view-model helpers

@@ -19,7 +19,7 @@ export default function LoginPage() {
     setIsLoading(true);
     
     try {
-      let { profile, error: loginError } = await login(emailToUse, passwordToUse);
+      let { user, profile, error: loginError } = await login({ email: emailToUse, password: passwordToUse });
       
       if (loginError) {
         if (loginError.message?.toLowerCase().includes('email not confirmed')) {
@@ -29,7 +29,8 @@ export default function LoginPage() {
         throw loginError;
       }
       
-      if (profile?.role === 'clinician') {
+      const activeRole = profile?.role || user?.user_metadata?.role;
+      if (activeRole === 'clinician') {
         navigate('/clinician');
       } else {
         navigate('/');

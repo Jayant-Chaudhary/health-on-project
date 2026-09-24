@@ -6,6 +6,7 @@ const { createAndSendInvite } = require('../services/invite.service');
 jest.mock('../config/supabaseAdminClient', () => ({
   auth: {
     getUser: jest.fn(),
+    admin: { listUsers: jest.fn() },
   },
   from: jest.fn(),
 }));
@@ -34,6 +35,10 @@ describe('Appointments API', () => {
       data: { user: mockUser },
       error: null,
     });
+
+    // No existing account for the invited email unless a test says otherwise.
+    supabaseAdmin.auth.admin.listUsers.mockResolvedValue({ data: { users: [] }, error: null });
+    createAndSendInvite.mockResolvedValue({ id: 'invite-1', inviteLink: 'http://localhost:5173/invite/tok' });
   });
 
   const setupProfileMock = (role = 'clinician') => {
@@ -84,12 +89,12 @@ describe('Appointments API', () => {
       });
 
       const response = await request(app)
-        .post('/appointments')
+        .post('/api/appointments')
         .set('Authorization', `Bearer ${mockToken}`)
         .send(validPayload);
 
       expect(response.status).toBe(201);
-      expect(response.body).toEqual(mockCreatedAppointment);
+      expect(response.body).toMatchObject({ ...mockCreatedAppointment, isReturningPatient: false });
       expect(createAndSendInvite).toHaveBeenCalledWith({
         appointmentId: 'appt-123',
         patientEmail: validPayload.patientEmail,
@@ -101,7 +106,7 @@ describe('Appointments API', () => {
       setupProfileMock('patient');
 
       const response = await request(app)
-        .post('/appointments')
+        .post('/api/appointments')
         .set('Authorization', `Bearer ${mockToken}`)
         .send(validPayload);
 
@@ -112,7 +117,7 @@ describe('Appointments API', () => {
       setupProfileMock('clinician');
 
       const response = await request(app)
-        .post('/appointments')
+        .post('/api/appointments')
         .set('Authorization', `Bearer ${mockToken}`)
         .send({ patientEmail: 'not-an-email' }); // Missing required fields and bad email
 
@@ -140,14 +145,23 @@ describe('Appointments API', () => {
             order: jest.fn().mockResolvedValue({ data: mockAppointments, error: null }),
           };
         }
+        if (table === 'appointment_invites') {
+          return {
+            select: jest.fn().mockReturnThis(),
+            in: jest.fn().mockResolvedValue({ data: [], error: null }),
+          };
+        }
       });
 
       const response = await request(app)
-        .get('/appointments')
+        .get('/api/appointments')
         .set('Authorization', `Bearer ${mockToken}`);
 
       expect(response.status).toBe(200);
-      expect(response.body).toEqual(mockAppointments);
+      // Appointments now carry the patient's name (or the invited name, for
+      // one not yet accepted), so compare on identity rather than shape.
+      expect(response.body).toHaveLength(1);
+      expect(response.body[0]).toMatchObject({ id: 'appt-1' });
     });
   });
 
@@ -174,7 +188,7 @@ describe('Appointments API', () => {
       });
 
       const response = await request(app)
-        .get('/appointments/appt-1')
+        .get('/api/appointments/appt-1')
         .set('Authorization', `Bearer ${mockToken}`);
 
       expect(response.status).toBe(200);
@@ -203,7 +217,7 @@ describe('Appointments API', () => {
       });
 
       const response = await request(app)
-        .get('/appointments/appt-1')
+        .get('/api/appointments/appt-1')
         .set('Authorization', `Bearer ${mockToken}`);
 
       expect(response.status).toBe(403);
@@ -230,7 +244,7 @@ describe('Appointments API', () => {
       });
 
       const response = await request(app)
-        .get('/appointments/non-existent')
+        .get('/api/appointments/non-existent')
         .set('Authorization', `Bearer ${mockToken}`);
 
       expect(response.status).toBe(404);
@@ -261,7 +275,7 @@ describe('Appointments API', () => {
       });
 
       const response = await request(app)
-        .patch('/appointments/appt-1/status')
+        .patch('/api/appointments/appt-1/status')
         .set('Authorization', `Bearer ${mockToken}`)
         .send({ status: 'completed' });
 

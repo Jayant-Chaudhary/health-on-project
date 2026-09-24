@@ -3,7 +3,7 @@ import { UploadCloud } from 'lucide-react';
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
 
-export default function UploadZone({ onUpload }) {
+export default function UploadZone({ onUpload, disabled = false }) {
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef(null);
 
@@ -35,7 +35,7 @@ export default function UploadZone({ onUpload }) {
   };
 
   const handleFiles = (file) => {
-    // In a real app we'd validate file type/size here
+    if (disabled) return;
     onUpload(file);
   };
 
@@ -63,11 +63,11 @@ export default function UploadZone({ onUpload }) {
           ref={fileInputRef} 
           onChange={handleChange} 
           className="hidden" 
-          accept="image/*,.pdf"
+          accept="image/png,image/jpeg,image/webp,application/pdf"
         />
         
-        <Button onClick={() => fileInputRef.current?.click()} className="px-8">
-          Select File
+        <Button onClick={() => fileInputRef.current?.click()} className="px-8" disabled={disabled}>
+          {disabled ? 'Uploading…' : 'Select File'}
         </Button>
       </div>
     </Card>

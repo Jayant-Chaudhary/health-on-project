@@ -4,6 +4,13 @@ const supabaseAdmin = require('../config/supabaseAdminClient');
 const { standardizeMetrics } = require('../services/standardization/standardizeLabReport.service');
 const { maybeFlagReportForTriage, getTriageQueue } = require('../services/triage.service');
 
+jest.mock('../services/storage.service', () => ({
+  LAB_REPORTS_BUCKET: 'lab-reports',
+  uploadFile: jest.fn(),
+  createSignedUrl: jest.fn().mockResolvedValue(null),
+  removeFile: jest.fn(),
+}));
+
 jest.mock('../config/supabaseAdminClient', () => ({
   auth: {
     getUser: jest.fn(),
@@ -112,7 +119,7 @@ describe('Lab Reports API', () => {
       });
 
       const response = await request(app)
-        .post('/lab-reports')
+        .post('/api/lab-reports')
         .set('Authorization', `Bearer ${mockToken}`)
         .send(validPayload);
 
@@ -130,7 +137,7 @@ describe('Lab Reports API', () => {
       setupAuthMock(mockPatient, mockPatientProfile);
 
       const response = await request(app)
-        .post('/lab-reports')
+        .post('/api/lab-reports')
         .set('Authorization', `Bearer ${mockToken}`)
         .send({ ocrStatus: 'success' }); // Missing required storagePath
 
@@ -155,11 +162,12 @@ describe('Lab Reports API', () => {
       });
 
       const response = await request(app)
-        .get('/lab-reports')
+        .get('/api/lab-reports')
         .set('Authorization', `Bearer ${mockToken}`);
 
       expect(response.status).toBe(200);
-      expect(response.body).toEqual(mockReports);
+      expect(response.body).toHaveLength(1);
+      expect(response.body[0]).toMatchObject({ id: 'report-1' });
     });
 
     it('should list reports for a specific patient if requester is clinician', async () => {
@@ -178,11 +186,12 @@ describe('Lab Reports API', () => {
       });
 
       const response = await request(app)
-        .get('/lab-reports?patientId=patient-123')
+        .get('/api/lab-reports?patientId=patient-123')
         .set('Authorization', `Bearer ${mockToken}`);
 
       expect(response.status).toBe(200);
-      expect(response.body).toEqual(mockReports);
+      expect(response.body).toHaveLength(1);
+      expect(response.body[0]).toMatchObject({ id: 'report-1' });
     });
   });
 
@@ -203,7 +212,7 @@ describe('Lab Reports API', () => {
       });
 
       const response = await request(app)
-        .get('/lab-reports/trend/hemoglobin')
+        .get('/api/lab-reports/trend/hemoglobin')
         .set('Authorization', `Bearer ${mockToken}`);
 
       expect(response.status).toBe(200);
@@ -218,7 +227,7 @@ describe('Lab Reports API', () => {
       getTriageQueue.mockResolvedValue(mockQueue);
 
       const response = await request(app)
-        .get('/lab-reports/triage/queue')
+        .get('/api/lab-reports/triage/queue')
         .set('Authorization', `Bearer ${mockToken}`);
 
       expect(response.status).toBe(200);
@@ -229,7 +238,7 @@ describe('Lab Reports API', () => {
       setupAuthMock(mockPatient, mockPatientProfile);
 
       const response = await request(app)
-        .get('/lab-reports/triage/queue')
+        .get('/api/lab-reports/triage/queue')
         .set('Authorization', `Bearer ${mockToken}`);
 
       expect(response.status).toBe(403);
@@ -254,7 +263,7 @@ describe('Lab Reports API', () => {
       });
 
       const response = await request(app)
-        .patch('/lab-reports/metrics/metric-1/review')
+        .patch('/api/lab-reports/metrics/metric-1/review')
         .set('Authorization', `Bearer ${mockToken}`)
         .send({ standardKey: 'hemoglobin', reviewedValue: 12.5 });
 

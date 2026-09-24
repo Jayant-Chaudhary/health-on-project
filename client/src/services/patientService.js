@@ -1,60 +1,73 @@
 import { request } from './apiClient';
 
+/** An appointment still ahead of the patient, or in progress today. */
+const UPCOMING_STATUSES = new Set(['invited', 'active', 'checked_in']);
+
 export const patientService = {
   async getProfile() {
-    return request('/api/auth/me');
+    return request('/api/profile');
   },
 
-  async getAppointment() {
-    const appointments = await request('/api/appointments');
-    // For now, return the most recent active appointment, or the first one
-    return appointments && appointments.length > 0 ? appointments[0] : null;
+  /**
+   * Every appointment the patient has, newest first, split into upcoming and
+   * past. A patient sees several doctors over a pregnancy, so the dashboard
+   * lists them rather than silently picking one.
+   */
+  async getAppointments() {
+    const appointments = (await request('/api/appointments')) ?? [];
+
+    const sorted = [...appointments].sort(
+      (a, b) => new Date(b.scheduled_at) - new Date(a.scheduled_at)
+    );
+
+    return {
+      all: sorted,
+      upcoming: sorted
+        .filter((a) => UPCOMING_STATUSES.has(a.status))
+        .sort((a, b) => new Date(a.scheduled_at) - new Date(b.scheduled_at)),
+      past: sorted.filter((a) => !UPCOMING_STATUSES.has(a.status)),
+    };
   },
 
-  async logVitals(vitals) {
-    return request('/api/vitals', {
-      method: 'POST',
-      body: vitals
-    });
+  /**
+   * The API stores one row per measurement, so a weight-plus-blood-pressure
+   * update is three rows rather than one object.
+   */
+  async logVitals(metrics, appointmentId) {
+    return Promise.all(
+      metrics
+        .filter((m) => m.value != null && !Number.isNaN(Number(m.value)))
+        .map((m) =>
+          request('/api/vitals', {
+            method: 'POST',
+            body: {
+              metricKey: m.metricKey,
+              value: Number(m.value),
+              unit: m.unit,
+              ...(appointmentId ? { appointmentId } : {}),
+            },
+          })
+        )
+    );
   },
 
+  /** Most recent reading per metric, keyed by metric_key. */
   async getLatestVitals() {
-    const vitals = await request('/api/vitals');
-    return vitals && vitals.length > 0 ? vitals[vitals.length - 1] : null;
+    const rows = (await request('/api/vitals')) ?? [];
+    const latest = {};
+    // The API returns newest first, so the first row seen per key wins.
+    for (const row of rows) {
+      if (!latest[row.metric_key]) latest[row.metric_key] = row;
+    }
+    return latest;
   },
 
   async updateAppointmentStatus(id, status) {
-    return request(`/api/appointments/${id}/status`, {
-      method: 'PATCH',
-      body: { status }
-    });
+    return request(`/api/appointments/${id}/status`, { method: 'PATCH', body: { status } });
   },
 
-  async getVisitSummary() {
-    // Fetch all appointments, then for completed ones fetch their post-visit summaries
-    const appointments = await request('/api/appointments');
-    if (!appointments) return [];
-
-    const pastAppointments = appointments.filter(a => a.status === 'completed' || a.status === 'archived');
-    
-    const summaries = await Promise.all(
-      pastAppointments.map(async (app) => {
-        try {
-          const summary = await request(`/api/post-visit/${app.id}`);
-          // Merge summary data with appointment context
-          return { ...summary, id: app.id, date: app.appointment_date, doctorName: 'Dr. Sarah Jenkins' };
-        } catch (e) {
-          return null; // summary might not exist yet
-        }
-      })
-    );
-    
-    return summaries.filter(Boolean);
+  /** Post-visit summary for one completed appointment. */
+  async getVisitSummary(appointmentId) {
+    return request(`/api/post-visit/${appointmentId}`);
   },
-  
-  async toggleNextStep(appointmentId, itemId, done) {
-    console.warn("Backend does not explicitly support toggling post-visit action items for patients yet.");
-    // In a real app we'd PATCH /api/post-visit/:id/action-items/:itemId
-    return true; 
-  }
 };

@@ -81,7 +81,7 @@ describe('Vitals API', () => {
       });
 
       const response = await request(app)
-        .post('/vitals')
+        .post('/api/vitals')
         .set('Authorization', `Bearer ${mockToken}`)
         .send(validPayload);
 
@@ -93,7 +93,7 @@ describe('Vitals API', () => {
       setupAuthMock(mockUser, mockProfile);
 
       const response = await request(app)
-        .post('/vitals')
+        .post('/api/vitals')
         .set('Authorization', `Bearer ${mockToken}`)
         .send({ metricKey: 'weight' }); // Missing value
 
@@ -118,7 +118,7 @@ describe('Vitals API', () => {
       });
 
       const response = await request(app)
-        .get('/vitals')
+        .get('/api/vitals')
         .set('Authorization', `Bearer ${mockToken}`);
 
       expect(response.status).toBe(200);
@@ -141,7 +141,7 @@ describe('Vitals API', () => {
       });
 
       const response = await request(app)
-        .get('/vitals?patientId=patient-123')
+        .get('/api/vitals?patientId=patient-123')
         .set('Authorization', `Bearer ${mockToken}`);
 
       expect(response.status).toBe(200);

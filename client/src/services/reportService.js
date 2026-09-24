@@ -1,39 +1,40 @@
-import { request } from './apiClient';
+import { request, upload } from './apiClient';
 
 export const reportService = {
+  /** Every report the patient has uploaded. */
   async getReports() {
-    // GET /api/lab-reports returns all reports for the current patient globally.
     return request('/api/lab-reports');
   },
 
-  async uploadReport(file) {
-    // In a full implementation, we would upload 'file' to Supabase Storage first,
-    // get the public storagePath, and run an OCR extractor on it.
-    // For now, we simulate the OCR payload so the backend can ingest it.
-    
-    // Create a local blob URL for temporary preview if needed (though storagePath is better)
-    const localUrl = URL.createObjectURL(file);
-    
-    const payload = {
-      storagePath: localUrl, // In reality, this would be "reports/uuid-filename.jpg"
-      reportDate: new Date().toISOString(),
-      ocrStatus: 'success',
-      metrics: [
-        { key: 'HGB', value: 12.5, unit: 'g/dL', confidence: 0.95 },
-        { key: 'WBC', value: 8.2, unit: '10^9/L', confidence: 0.90 }
-      ]
-    };
+  /** Only the reports the patient shared with one appointment. */
+  async getReportsForAppointment(appointmentId) {
+    return request(`/api/lab-reports?appointmentId=${appointmentId}`);
+  },
 
-    // Send the simulated OCR payload to the backend
-    return request('/api/lab-reports', {
+  /**
+   * Sends the real file. The server stores it, runs the OCR pipeline over it
+   * and returns the saved report, so there is nothing to simulate here.
+   */
+  async uploadReport(file, { appointmentId } = {}) {
+    const form = new FormData();
+    form.append('file', file);
+    if (appointmentId) form.append('appointmentId', appointmentId);
+
+    return upload('/api/lab-reports/upload', form);
+  },
+
+  async shareWithAppointment(reportId, appointmentId) {
+    return request(`/api/lab-reports/${reportId}/share`, {
       method: 'POST',
-      body: payload
+      body: { appointmentId },
     });
   },
 
-  async removeReport(id) {
-    // Currently no DELETE route for lab reports in the backend yet.
-    console.warn("Backend does not support deleting reports yet.");
-    return true;
-  }
+  async unshareFromAppointment(reportId, appointmentId) {
+    return request(`/api/lab-reports/${reportId}/share/${appointmentId}`, { method: 'DELETE' });
+  },
+
+  async removeReport(reportId) {
+    return request(`/api/lab-reports/${reportId}`, { method: 'DELETE' });
+  },
 };

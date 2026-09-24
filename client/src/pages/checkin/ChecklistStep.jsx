@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { checkinService } from '../../services/checkinService';
+import { usePatientContext } from '../../context/PatientContext';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Checkbox } from '../../components/ui/Checkbox';
@@ -12,15 +13,18 @@ export default function ChecklistStep() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const navigate = useNavigate();
+  const { appointment } = usePatientContext();
 
   useEffect(() => {
     async function load() {
-      const data = await checkinService.getChecklist();
-      setItems(data);
+      if (appointment) {
+        const data = await checkinService.getChecklist(appointment.id);
+        setItems(data);
+      }
       setLoading(false);
     }
     load();
-  }, []);
+  }, [appointment]);
 
   const handleToggle = (id) => {
     setItems(items.map(item => 
@@ -30,11 +34,13 @@ export default function ChecklistStep() {
 
   const handleSubmit = async () => {
     setSubmitting(true);
-    await checkinService.submitCheckin();
+    if (appointment) {
+      await checkinService.submitCheckin(appointment.id);
+    }
     navigate('/checkin/done');
   };
 
-  const clinicItems = items.filter(i => i.source === 'clinic');
+  const clinicItems = items.filter(i => i.source === 'clinic' || !i.source);
   const aiItems = items.filter(i => i.source === 'ai');
 
   if (loading) {

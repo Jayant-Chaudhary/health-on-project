@@ -40,3 +40,23 @@ export async function request(path, { method = 'GET', body, signal } = {}) {
 
   return response.status === 204 ? null : response.json();
 }
+
+/**
+ * Multipart upload. The browser must set its own multipart boundary, so this
+ * deliberately does not send a Content-Type header.
+ */
+export async function upload(path, formData, { method = 'POST' } = {}) {
+  const response = await fetch(`${BASE_URL}${path}`, {
+    method,
+    credentials: 'include',
+    headers: await authHeader(),
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({}));
+    throw new ApiError(payload.error || `Upload failed (${response.status})`, response.status);
+  }
+
+  return response.json();
+}

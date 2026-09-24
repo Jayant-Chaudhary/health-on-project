@@ -5,7 +5,7 @@ import { usePatientContext } from '../../context/PatientContext';
 import { useAuth } from '../../hooks/useAuth';
 
 export default function TopNavbar() {
-  const { appointment, patient } = usePatientContext();
+  const { activeAppointment, profile } = usePatientContext();
   const { logout } = useAuth();
   const navigate = useNavigate();
   
@@ -14,16 +14,16 @@ export default function TopNavbar() {
     navigate('/login');
   };
   
-  const showBadge = appointment?.status === 'SCHEDULED' || appointment?.status === 'CHECKIN_IN_PROGRESS';
+  // Nudge the patient while a selected visit still needs checking in.
+  const showBadge = activeAppointment?.status === 'invited' || activeAppointment?.status === 'active';
 
   const navItems = [
-    { to: "/", icon: Home, label: "Dashboard" },
+    { to: "/", icon: Home, label: "Dashboard", badge: showBadge },
     { to: "/reports", icon: FileText, label: "Lab Reports" },
     { 
       to: "/summary", 
       icon: ClipboardList, 
-      label: "Visit Summary",
-      badge: showBadge
+      label: "Visit Summary"
     }
   ];
 
@@ -69,7 +69,7 @@ export default function TopNavbar() {
           {/* User Profile */}
           <div className="flex items-center gap-3 relative group">
             <div className="text-right hidden sm:block">
-              <p className="text-sm font-bold text-ink leading-tight">{patient?.name}</p>
+              <p className="text-sm font-bold text-ink leading-tight">{profile?.fullName}</p>
               <p className="text-xs text-ink-soft">Patient Portal</p>
             </div>
             <div className="w-10 h-10 bg-canvas rounded-full border border-ink-soft/20 flex items-center justify-center text-primary cursor-pointer hover:bg-primary-light transition-colors peer">
