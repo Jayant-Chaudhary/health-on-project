@@ -1,19 +1,30 @@
+import { Link } from 'react-router-dom';
 import { usePatientContext } from '../../context/PatientContext';
 import ActionBanner from '../../components/home/ActionBanner';
 import VitalsCard from '../../components/home/VitalsCard';
+import AppointmentCard from '../../components/home/AppointmentCard';
 import { Card } from '../../components/ui/Card';
-import { MapPin, Phone } from 'lucide-react';
 import { Skeleton } from '../../components/ui/Skeleton';
+import { EmptyState } from '../../components/ui/EmptyState';
+import { CalendarPlus } from 'lucide-react';
+
+function greeting() {
+  const hour = new Date().getHours();
+  if (hour < 12) return 'Good morning';
+  if (hour < 18) return 'Good afternoon';
+  return 'Good evening';
+}
+
+function gestationLabel(days) {
+  if (days == null) return null;
+  const weeks = Math.floor(days / 7);
+  const trimester = days < 98 ? 1 : days < 189 ? 2 : 3;
+  return `${weeks} weeks · Trimester ${trimester}`;
+}
 
 export default function HomePage() {
-  const { patient, appointment, loading } = usePatientContext();
-
-  const getGreeting = () => {
-    const hour = new Date().getHours();
-    if (hour < 12) return 'Good morning';
-    if (hour < 18) return 'Good afternoon';
-    return 'Good evening';
-  };
+  const { profile, appointments, activeAppointment, selectAppointment, loading, error } =
+    usePatientContext();
 
   if (loading) {
     return (
@@ -25,50 +36,89 @@ export default function HomePage() {
     );
   }
 
+  if (error) {
+    return (
+      <div className="py-8">
+        <Card className="p-8 text-center">
+          <h2 className="font-bold text-lg text-ink mb-2">Could not load your details</h2>
+          <p className="text-ink-soft">{error.message}</p>
+        </Card>
+      </div>
+    );
+  }
+
+  const firstName = profile?.fullName?.split(' ')[0] ?? 'there';
+  const gestation = gestationLabel(profile?.gestationalDays);
+
   return (
     <div className="py-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
-      {/* Header */}
-      <header className="mb-8 flex justify-between items-center">
-        <div>
+      <header className="mb-8 flex justify-between items-center gap-4">
+        <div className="min-w-0">
           <h1 className="text-3xl font-bold text-ink mb-2">
-            {getGreeting()}, {patient?.name.split(' ')[0]}
+            {greeting()}, {firstName}
           </h1>
-          <div className="inline-flex items-center px-3 py-1 bg-primary-light text-primary-dark text-sm font-bold rounded-full">
-            {patient?.gestationWeeks} weeks · Trimester {patient?.trimester}
-          </div>
+          {gestation ? (
+            <div className="inline-flex items-center px-3 py-1 bg-primary-light text-primary-dark text-sm font-bold rounded-full">
+              {gestation}
+            </div>
+          ) : (
+            <Link to="/profile" className="text-sm font-medium text-primary hover:underline">
+              Add your due date to track your pregnancy →
+            </Link>
+          )}
         </div>
-        <div className="w-16 h-16 bg-primary text-white rounded-full flex items-center justify-center font-bold text-2xl shadow-sm">
-          {patient?.name.charAt(0)}
+        <div className="w-16 h-16 shrink-0 bg-primary text-white rounded-full flex items-center justify-center font-bold text-2xl shadow-sm">
+          {firstName.charAt(0).toUpperCase()}
         </div>
       </header>
 
       <ActionBanner />
-      
-      <div className="mt-6">
-        {/* Clinic Card */}
-        <Card className="mb-6">
-        <div className="flex items-center gap-4 mb-4">
-          <div className="w-14 h-14 bg-canvas rounded-full flex items-center justify-center border border-ink-soft/20">
-            <span className="text-xl">🏥</span>
+
+      <section className="mt-8">
+        <h2 className="text-lg font-bold text-ink mb-1">Upcoming appointments</h2>
+        <p className="text-sm text-ink-soft mb-4">
+          Select one to check in for it, or to choose which reports it can see.
+        </p>
+
+        {appointments.upcoming.length === 0 ? (
+          <EmptyState
+            icon={<CalendarPlus size={22} />}
+            title="No upcoming appointments"
+            description="When your clinic schedules a visit, it will appear here."
+          />
+        ) : (
+          <div className="grid gap-4 sm:grid-cols-2">
+            {appointments.upcoming.map((appointment) => (
+              <AppointmentCard
+                key={appointment.id}
+                appointment={appointment}
+                isSelected={appointment.id === activeAppointment?.id}
+                onSelect={selectAppointment}
+              />
+            ))}
           </div>
-          <div>
-            <h3 className="font-bold text-ink">{appointment?.doctor.name}</h3>
-            <p className="text-sm text-ink-soft">{appointment?.clinic.name}</p>
+        )}
+      </section>
+
+      {appointments.past.length > 0 && (
+        <section className="mt-8">
+          <h2 className="text-lg font-bold text-ink mb-4">Past visits</h2>
+          <div className="grid gap-4 sm:grid-cols-2">
+            {appointments.past.map((appointment) => (
+              <AppointmentCard
+                key={appointment.id}
+                appointment={appointment}
+                isSelected={appointment.id === activeAppointment?.id}
+                onSelect={selectAppointment}
+              />
+            ))}
           </div>
-        </div>
-        
-        <div className="space-y-3 pt-4 border-t border-ink-soft/10">
-          <a href={appointment?.clinic.mapsUrl} target="_blank" rel="noreferrer" className="flex items-center gap-3 text-sm text-ink font-medium hover:text-primary transition-colors">
-            <MapPin className="text-primary" size={18} />
-            <span>Get directions</span>
-          </a>
-          <a href={`tel:${appointment?.clinic.phone}`} className="flex items-center gap-3 text-sm text-ink font-medium hover:text-primary transition-colors">
-            <Phone className="text-primary" size={18} />
-            <span>Call clinic</span>
-          </a>
-        </div>
-      </Card>
-      </div>
+        </section>
+      )}
+
+      <section className="mt-8">
+        <VitalsCard />
+      </section>
     </div>
   );
 }

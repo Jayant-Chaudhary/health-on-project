@@ -1,64 +1,54 @@
 import { request } from './apiClient';
 
 export const checkinService = {
+  /**
+   * The active questionnaire. The API returns a flat list of question rows
+   * ordered by sort_order — each row is its own template, not a container.
+   */
   async getQuestions() {
-    // GET /api/questionnaire/templates
-    // The backend returns an array of templates. We'll use the first one's questions.
-    const templates = await request('/api/questionnaire/templates');
-    if (!templates || templates.length === 0) return [];
-    
-    // We store the templateId globally or just return the questions mapped properly
-    // For simplicity, we just return the questions array.
-    window.__currentTemplateId = templates[0].id;
-    return templates[0].questions || [];
+    return (await request('/api/questionnaire/templates')) ?? [];
   },
 
+  /**
+   * `answers` maps a template id to a boolean, which is the shape the API
+   * stores: one row per question, answered yes or no.
+   */
   async saveAnswers(appointmentId, answers) {
-    // answers is likely a key-value object from the frontend state.
-    // The backend expects: { appointmentId, templateId, responses: [{ questionId, answerValue }] }
-    
-    const templateId = window.__currentTemplateId;
-    if (!templateId || !appointmentId) return false;
+    const responses = Object.entries(answers)
+      .filter(([, value]) => typeof value === 'boolean')
+      .map(([templateId, answer]) => ({ templateId, answer }));
 
-    // Convert flat answers object to array format
-    const formattedResponses = Object.entries(answers).map(([key, value]) => ({
-      questionId: key,
-      answerValue: typeof value === 'boolean' ? (value ? 'yes' : 'no') : String(value)
-    }));
+    if (!appointmentId || responses.length === 0) return null;
 
     return request('/api/questionnaire/responses', {
       method: 'POST',
-      body: {
-        appointmentId,
-        templateId,
-        responses: formattedResponses
-      }
+      body: { appointmentId, responses },
     });
+  },
+
+  async getAnswers(appointmentId) {
+    if (!appointmentId) return [];
+    return (await request(`/api/questionnaire/responses/${appointmentId}`)) ?? [];
   },
 
   async getChecklist(appointmentId) {
     if (!appointmentId) return [];
-    try {
-      const data = await request(`/api/checklist/${appointmentId}`);
-      return data?.items || [];
-    } catch (e) {
-      return [];
-    }
+    return (await request(`/api/checklist/${appointmentId}`)) ?? [];
   },
 
-  async toggleChecklistItem(itemId, done) {
+  async toggleChecklistItem(itemId, isCompleted) {
     return request(`/api/checklist/items/${itemId}`, {
       method: 'PATCH',
-      body: { status: done ? 'completed' : 'pending' }
+      body: { isCompleted },
     });
   },
 
+  /** Marks the patient as checked in for the visit. */
   async submitCheckin(appointmentId) {
-    if (!appointmentId) return false;
-    // Update appointment status to ready (in triage)
+    if (!appointmentId) return null;
     return request(`/api/appointments/${appointmentId}/status`, {
       method: 'PATCH',
-      body: { status: 'ready' }
+      body: { status: 'checked_in' },
     });
-  }
+  },
 };

@@ -77,7 +77,7 @@ describe('Post Visit API', () => {
       });
 
       const response = await request(app)
-        .put('/post-visit/appt-1/notes')
+        .put('/api/post-visit/appt-1/notes')
         .set('Authorization', `Bearer ${mockToken}`)
         .send({ notesText: 'Patient doing well' });
 
@@ -89,7 +89,7 @@ describe('Post Visit API', () => {
       setupAuthMock(mockPatient, mockPatientProfile);
 
       const response = await request(app)
-        .put('/post-visit/appt-1/notes')
+        .put('/api/post-visit/appt-1/notes')
         .set('Authorization', `Bearer ${mockToken}`)
         .send({ notesText: 'Some notes' });
 
@@ -114,7 +114,7 @@ describe('Post Visit API', () => {
       });
 
       const response = await request(app)
-        .post('/post-visit/appt-1/prescriptions')
+        .post('/api/post-visit/appt-1/prescriptions')
         .set('Authorization', `Bearer ${mockToken}`)
         .send({ storagePath: 'prescriptions/rx-1.pdf', typedInstructions: 'Take 2 pills daily' });
 
@@ -147,7 +147,7 @@ describe('Post Visit API', () => {
       });
 
       const response = await request(app)
-        .post('/post-visit/appt-1/action-items')
+        .post('/api/post-visit/appt-1/action-items')
         .set('Authorization', `Bearer ${mockToken}`)
         .send({ label: 'Blood test' });
 
@@ -177,7 +177,7 @@ describe('Post Visit API', () => {
       });
 
       const response = await request(app)
-        .get('/post-visit/appt-1')
+        .get('/api/post-visit/appt-1')
         .set('Authorization', `Bearer ${mockToken}`);
 
       expect(response.status).toBe(200);

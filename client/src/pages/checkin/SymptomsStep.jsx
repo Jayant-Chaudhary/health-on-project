@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { checkinService } from '../../services/checkinService';
+import { usePatientContext } from '../../context/PatientContext';
+import { useToast } from '../../context/ToastContext';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { YesNoToggle } from '../../components/ui/YesNoToggle';
@@ -10,6 +12,9 @@ export default function SymptomsStep() {
   const [questions, setQuestions] = useState([]);
   const [answers, setAnswers] = useState({});
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const { activeAppointment } = usePatientContext();
+  const { showToast } = useToast();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -36,9 +41,27 @@ export default function SymptomsStep() {
   };
 
   const handleNext = async () => {
-    // In a real app we'd validate here
-    await checkinService.saveAnswers(answers);
-    navigate('/checkin/checklist');
+    if (!activeAppointment) {
+      showToast('Select an appointment on your dashboard first.', 'error');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      // The API stores one boolean per question, keyed by template id.
+      const booleanAnswers = Object.fromEntries(
+        Object.entries(answers)
+          .filter(([, a]) => a?.value === 'yes' || a?.value === 'no')
+          .map(([id, a]) => [id, a.value === 'yes'])
+      );
+
+      await checkinService.saveAnswers(activeAppointment.id, booleanAnswers);
+      navigate('/checkin/checklist');
+    } catch (err) {
+      showToast(err.message || 'Could not save your answers.', 'error');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const allAnswered = questions.length > 0 && questions.every(q => answers[q.id]?.value !== undefined);
@@ -64,7 +87,7 @@ export default function SymptomsStep() {
           const ans = answers[q.id];
           return (
             <Card key={q.id} className="p-5">
-              <h3 className="font-bold text-lg text-ink mb-4 leading-tight">{q.text}</h3>
+              <h3 className="font-bold text-lg text-ink mb-4 leading-tight">{q.question_text}</h3>
               
               <div className="mb-4">
                 <YesNoToggle 
@@ -98,7 +121,7 @@ export default function SymptomsStep() {
           onClick={handleNext}
           disabled={!allAnswered}
         >
-          {allAnswered ? 'Continue to Next Step' : 'Please answer all questions'}
+          {saving ? 'Saving…' : allAnswered ? 'Continue to Next Step' : 'Please answer all questions'}
         </Button>
       </div>
     </div>

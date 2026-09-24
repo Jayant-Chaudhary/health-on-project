@@ -1,44 +1,78 @@
-import { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { patientService } from '../services/patientService';
 
 const PatientContext = createContext(null);
 
+/**
+ * The signed-in patient, their appointments and their latest vitals.
+ *
+ * A patient has many appointments over a pregnancy — often with more than one
+ * clinician — so the provider exposes the whole list and tracks which one the
+ * user is currently looking at, rather than silently picking the first.
+ */
 export function PatientProvider({ children }) {
-  const [patient, setPatient] = useState(null);
-  const [appointment, setAppointment] = useState(null);
+  const [profile, setProfile] = useState(null);
+  const [appointments, setAppointments] = useState({ all: [], upcoming: [], past: [] });
+  const [selectedId, setSelectedId] = useState(null);
   const [vitals, setVitals] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  useEffect(() => {
-    async function load() {
-      try {
-        const [pat, appt, v] = await Promise.all([
-          patientService.getProfile(),
-          patientService.getAppointment(),
-          patientService.getLatestVitals()
-        ]);
-        setPatient(pat);
-        setAppointment(appt);
-        setVitals(v);
-      } catch (err) {
-        console.error("Failed to load patient data", err);
-      } finally {
-        setLoading(false);
-      }
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [profileData, appointmentData, vitalsData] = await Promise.all([
+        patientService.getProfile(),
+        patientService.getAppointments(),
+        patientService.getLatestVitals().catch(() => null),
+      ]);
+
+      setProfile(profileData);
+      setAppointments(appointmentData);
+      setVitals(vitalsData);
+      setSelectedId((current) => current ?? appointmentData.upcoming[0]?.id ?? appointmentData.all[0]?.id ?? null);
+    } catch (err) {
+      setError(err);
+    } finally {
+      setLoading(false);
     }
-    load();
   }, []);
 
-  const updateStatus = async (newStatus) => {
-    const updated = await patientService.updateAppointmentStatus(newStatus);
-    setAppointment({ ...updated });
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  /** The appointment the UI is currently acting on. */
+  const activeAppointment = useMemo(
+    () => appointments.all.find((a) => a.id === selectedId) ?? null,
+    [appointments.all, selectedId]
+  );
+
+  const updateStatus = useCallback(
+    async (status, appointmentId = selectedId) => {
+      if (!appointmentId) return null;
+      const updated = await patientService.updateAppointmentStatus(appointmentId, status);
+      await load();
+      return updated;
+    },
+    [selectedId, load]
+  );
+
+  const value = {
+    profile,
+    appointments,
+    activeAppointment,
+    selectAppointment: setSelectedId,
+    vitals,
+    setVitals,
+    loading,
+    error,
+    refresh: load,
+    updateStatus,
   };
 
-  return (
-    <PatientContext.Provider value={{ patient, appointment, vitals, loading, updateStatus }}>
-      {children}
-    </PatientContext.Provider>
-  );
+  return <PatientContext.Provider value={value}>{children}</PatientContext.Provider>;
 }
 
 export const usePatientContext = () => useContext(PatientContext);
