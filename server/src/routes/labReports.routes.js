@@ -2,6 +2,8 @@ const express = require('express');
 const authGuard = require('../middleware/authGuard');
 const roleGuard = require('../middleware/roleGuard');
 const validateBody = require('../middleware/validateBody');
+const upload = require('../middleware/ocrUpload');
+const { getOcrHealth, recognizeUpload } = require('../controllers/ocr.controller');
 const { ocrPayloadSchema, reviewMetricSchema } = require('../validators/labReports.validators');
 const {
   ingestReport,
@@ -15,6 +17,8 @@ const router = express.Router();
 
 router.use(authGuard);
 
+router.get('/ocr/health', getOcrHealth);
+router.post('/ocr', upload.single('file'), recognizeUpload);
 router.post('/', validateBody(ocrPayloadSchema), ingestReport);
 router.get('/', listReportsForPatient);
 router.get('/trend/:standardKey', getMetricTrend);
