@@ -1,37 +1,54 @@
 import { request } from './apiClient';
 
 export const checkinService = {
-  async getQuestions(appointmentId) {
-    if (appointmentId) {
-      return request(`/questionnaire/appointment/${appointmentId}`);
-    }
-    return request('/questionnaire/templates');
+  /**
+   * The active questionnaire. The API returns a flat list of question rows
+   * ordered by sort_order — each row is its own template, not a container.
+   */
+  async getQuestions() {
+    return (await request('/api/questionnaire/templates')) ?? [];
   },
 
+  /**
+   * `answers` maps a template id to a boolean, which is the shape the API
+   * stores: one row per question, answered yes or no.
+   */
   async saveAnswers(appointmentId, answers) {
-    // answers is expected to be { templateId: boolean } in UI, but backend wants array
-    // We assume the UI will be updated or we format it if needed, but for now we just pass it.
-    // The backend route is POST /questionnaire/responses and expects { appointmentId, responses: [{ templateId, answer }] }
-    const formattedResponses = Object.entries(answers).map(([templateId, obj]) => ({
-      templateId,
-      answer: obj.value === 'yes',
-      detail: obj.notes || ''
-    }));
-    return request('/questionnaire/responses', {
+    const responses = Object.entries(answers)
+      .filter(([, value]) => typeof value === 'boolean')
+      .map(([templateId, answer]) => ({ templateId, answer }));
+
+    if (!appointmentId || responses.length === 0) return null;
+
+    return request('/api/questionnaire/responses', {
       method: 'POST',
-      body: { appointmentId, responses: formattedResponses }
+      body: { appointmentId, responses },
     });
+  },
+
+  async getAnswers(appointmentId) {
+    if (!appointmentId) return [];
+    return (await request(`/api/questionnaire/responses/${appointmentId}`)) ?? [];
   },
 
   async getChecklist(appointmentId) {
-    return request(`/checklist/${appointmentId}`);
+    if (!appointmentId) return [];
+    return (await request(`/api/checklist/${appointmentId}`)) ?? [];
   },
 
-  async submitCheckin(appointmentId) {
-    // Update appointment status to checked_in
-    return request(`/appointments/${appointmentId}/status`, {
+  async toggleChecklistItem(itemId, isCompleted) {
+    return request(`/api/checklist/items/${itemId}`, {
       method: 'PATCH',
-      body: { status: 'checked_in' }
+      body: { isCompleted },
     });
-  }
+  },
+
+  /** Marks the patient as checked in for the visit. */
+  async submitCheckin(appointmentId) {
+    if (!appointmentId) return null;
+    return request(`/api/appointments/${appointmentId}/status`, {
+      method: 'PATCH',
+      body: { status: 'checked_in' },
+    });
+  },
 };

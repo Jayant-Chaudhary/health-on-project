@@ -76,7 +76,7 @@ describe('Checklist API', () => {
       });
 
       const response = await request(app)
-        .get('/checklist/appt-123')
+        .get('/api/checklist/appt-123')
         .set('Authorization', `Bearer ${mockToken}`);
 
       expect(response.status).toBe(200);
@@ -108,7 +108,7 @@ describe('Checklist API', () => {
       });
 
       const response = await request(app)
-        .patch('/checklist/items/item-1')
+        .patch('/api/checklist/items/item-1')
         .set('Authorization', `Bearer ${mockToken}`)
         .send({ isCompleted: true });
 
@@ -118,7 +118,7 @@ describe('Checklist API', () => {
 
     it('should return 400 if isCompleted is missing or invalid type', async () => {
       const response = await request(app)
-        .patch('/checklist/items/item-1')
+        .patch('/api/checklist/items/item-1')
         .set('Authorization', `Bearer ${mockToken}`)
         .send({ isCompleted: 'not-a-boolean' }); // Invalid payload
 

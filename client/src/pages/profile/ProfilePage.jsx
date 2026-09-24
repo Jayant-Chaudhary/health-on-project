@@ -1,11 +1,68 @@
+import { useEffect, useState } from 'react';
+import { User, Save } from 'lucide-react';
 import { usePatientContext } from '../../context/PatientContext';
+import { useToast } from '../../context/ToastContext';
+import { profileService } from '../../services/profileService';
 import VitalsCard from '../../components/home/VitalsCard';
 import { Card } from '../../components/ui/Card';
+import { Button } from '../../components/ui/Button';
+import { TextField } from '../../components/ui/TextField';
 import { Skeleton } from '../../components/ui/Skeleton';
-import { User, Phone, MapPin } from 'lucide-react';
+
+/** Only these keys are editable; anything else the API returns is display-only. */
+const EDITABLE = [
+  'fullName',
+  'phone',
+  'dateOfBirth',
+  'dueDate',
+  'bloodType',
+  'gravida',
+  'para',
+  'address',
+  'emergencyContactName',
+  'emergencyContactPhone',
+];
+
+function toForm(profile) {
+  return EDITABLE.reduce((form, key) => ({ ...form, [key]: profile?.[key] ?? '' }), {});
+}
 
 export default function ProfilePage() {
-  const { patient, loading } = usePatientContext();
+  const { profile, loading, refresh } = usePatientContext();
+  const { showToast } = useToast();
+
+  const [form, setForm] = useState(() => toForm(profile));
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (profile) setForm(toForm(profile));
+  }, [profile]);
+
+  const set = (key) => (event) => setForm((f) => ({ ...f, [key]: event.target.value }));
+
+  async function handleSubmit(event) {
+    event.preventDefault();
+    setSaving(true);
+
+    try {
+      // Send empty strings as null so clearing a field actually clears it,
+      // and send the counts as numbers rather than strings.
+      const changes = EDITABLE.reduce((payload, key) => {
+        const value = form[key];
+        if (value === '' || value == null) return { ...payload, [key]: null };
+        if (key === 'gravida' || key === 'para') return { ...payload, [key]: Number(value) };
+        return { ...payload, [key]: value };
+      }, {});
+
+      await profileService.updateProfile(changes);
+      await refresh();
+      showToast('Profile updated.');
+    } catch (err) {
+      showToast(err.message || 'Could not save your profile.', 'error');
+    } finally {
+      setSaving(false);
+    }
+  }
 
   if (loading) {
     return (
@@ -20,52 +77,89 @@ export default function ProfilePage() {
     <div className="py-8 animate-in fade-in duration-300 max-w-4xl mx-auto">
       <header className="mb-8">
         <h1 className="text-3xl font-bold text-ink mb-2">My Profile</h1>
-        <p className="text-ink-soft">Manage your personal details and track your vitals.</p>
+        <p className="text-ink-soft">Keep your details current — your clinician sees them at every visit.</p>
       </header>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-        
-        {/* Left Column: Personal Details */}
-        <div className="space-y-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <form onSubmit={handleSubmit} className="space-y-6">
           <Card className="p-6">
             <div className="flex items-center gap-4 mb-6">
               <div className="w-16 h-16 bg-primary text-white rounded-full flex items-center justify-center font-bold text-2xl shadow-sm">
-                {patient?.name.charAt(0)}
+                {(form.fullName || '?').charAt(0).toUpperCase()}
               </div>
-              <div>
-                <h3 className="font-bold text-xl text-ink">{patient?.name}</h3>
-                <p className="text-sm text-ink-soft">Patient ID: #MC-82910</p>
+              <div className="min-w-0">
+                <h3 className="font-bold text-xl text-ink truncate">{form.fullName || 'Your name'}</h3>
+                <p className="text-sm text-ink-soft flex items-center gap-1.5">
+                  <User size={14} /> Patient
+                </p>
               </div>
             </div>
-            
+
             <div className="space-y-4">
-              <div className="flex items-center gap-3">
-                <User className="text-ink-soft w-5 h-5" />
-                <div>
-                  <p className="text-xs text-ink-soft font-bold uppercase tracking-wider">Pregnancy Status</p>
-                  <p className="text-sm font-medium text-ink">{patient?.gestationWeeks} weeks (Trimester {patient?.trimester})</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <Phone className="text-ink-soft w-5 h-5" />
-                <div>
-                  <p className="text-xs text-ink-soft font-bold uppercase tracking-wider">Contact</p>
-                  <p className="text-sm font-medium text-ink">+91 98765 43210</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <MapPin className="text-ink-soft w-5 h-5" />
-                <div>
-                  <p className="text-xs text-ink-soft font-bold uppercase tracking-wider">Address</p>
-                  <p className="text-sm font-medium text-ink">123 Sunrise Avenue, Block 4</p>
-                </div>
-              </div>
+              <TextField label="Full name" value={form.fullName} onChange={set('fullName')} />
+              <TextField label="Phone" value={form.phone} onChange={set('phone')} type="tel" />
+              <TextField
+                label="Date of birth"
+                value={form.dateOfBirth}
+                onChange={set('dateOfBirth')}
+                type="date"
+              />
+              <TextField label="Address" value={form.address} onChange={set('address')} />
             </div>
           </Card>
-        </div>
 
-        {/* Right Column: Vitals Updater (moved from Home) */}
-        <div>
+          <Card className="p-6">
+            <h3 className="font-bold text-lg text-ink mb-4">Pregnancy</h3>
+            <div className="space-y-4">
+              <TextField
+                label="Estimated due date"
+                value={form.dueDate}
+                onChange={set('dueDate')}
+                type="date"
+              />
+              {profile?.gestationalDays != null && (
+                <p className="text-sm text-ink-soft -mt-2">
+                  That puts you at {Math.floor(profile.gestationalDays / 7)} weeks today.
+                </p>
+              )}
+              <div className="grid grid-cols-2 gap-4">
+                <TextField
+                  label="Gravida"
+                  value={form.gravida}
+                  onChange={set('gravida')}
+                  type="number"
+                  min="0"
+                />
+                <TextField label="Para" value={form.para} onChange={set('para')} type="number" min="0" />
+              </div>
+              <TextField label="Blood type" value={form.bloodType} onChange={set('bloodType')} />
+            </div>
+          </Card>
+
+          <Card className="p-6">
+            <h3 className="font-bold text-lg text-ink mb-4">Emergency contact</h3>
+            <div className="space-y-4">
+              <TextField
+                label="Name"
+                value={form.emergencyContactName}
+                onChange={set('emergencyContactName')}
+              />
+              <TextField
+                label="Phone"
+                value={form.emergencyContactPhone}
+                onChange={set('emergencyContactPhone')}
+                type="tel"
+              />
+            </div>
+          </Card>
+
+          <Button type="submit" disabled={saving} className="w-full flex items-center justify-center gap-2">
+            <Save size={18} />
+            {saving ? 'Saving…' : 'Save changes'}
+          </Button>
+        </form>
+
+        <div className="space-y-6">
           <VitalsCard />
         </div>
       </div>

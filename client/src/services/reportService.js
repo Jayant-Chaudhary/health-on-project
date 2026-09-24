@@ -1,52 +1,40 @@
-import { request } from './apiClient';
-import { supabase } from './supabaseClient';
+import { request, upload } from './apiClient';
 
 export const reportService = {
+  /** Every report the patient has uploaded. */
   async getReports() {
-    const data = await request('/lab-reports');
-    // Map DB fields to UI fields
-    return data.map(r => ({
-      id: r.id,
-      title: r.source_name || r.storage_path?.split('/').pop() || 'Uploaded Report',
-      reportDate: r.report_date || r.uploaded_at,
-      status: r.ocr_status === 'completed' ? 'success' : 
-              r.ocr_status === 'failed' || r.ocr_status === 'requires_review' ? 'needs_attention' : 
-              'processing'
-    }));
+    return request('/api/lab-reports');
   },
 
-  async uploadReport(file, appointmentId) {
-    // 1. Upload file to Supabase storage 'lab-reports' bucket
-    const fileExt = file.name.split('.').pop();
-    const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
-    const filePath = `uploads/${fileName}`;
+  /** Only the reports the patient shared with one appointment. */
+  async getReportsForAppointment(appointmentId) {
+    return request(`/api/lab-reports?appointmentId=${appointmentId}`);
+  },
 
-    const { data: uploadData, error: uploadError } = await supabase.storage
-      .from('lab-reports')
-      .upload(filePath, file);
+  /**
+   * Sends the real file. The server stores it, runs the OCR pipeline over it
+   * and returns the saved report, so there is nothing to simulate here.
+   */
+  async uploadReport(file, { appointmentId } = {}) {
+    const form = new FormData();
+    form.append('file', file);
+    if (appointmentId) form.append('appointmentId', appointmentId);
 
-    if (uploadError) {
-      throw uploadError;
-    }
+    return upload('/api/lab-reports/upload', form);
+  },
 
-    // 2. Call backend to ingest it
-    // If OCR pipeline is integrated, it might be triggered here or via a webhook.
-    // For now we just create the record.
-    return request('/lab-reports', {
+  async shareWithAppointment(reportId, appointmentId) {
+    return request(`/api/lab-reports/${reportId}/share`, {
       method: 'POST',
-      body: {
-        appointmentId: appointmentId || null,
-        storagePath: uploadData.path,
-        reportDate: new Date().toISOString(),
-        metrics: [],
-        ocrStatus: 'pending'
-      }
+      body: { appointmentId },
     });
   },
 
-  async removeReport(id) {
-    // Not supported by backend yet, so just returning true for now
-    // In real app we'd DELETE /lab-reports/:id
-    return true;
-  }
+  async unshareFromAppointment(reportId, appointmentId) {
+    return request(`/api/lab-reports/${reportId}/share/${appointmentId}`, { method: 'DELETE' });
+  },
+
+  async removeReport(reportId) {
+    return request(`/api/lab-reports/${reportId}`, { method: 'DELETE' });
+  },
 };

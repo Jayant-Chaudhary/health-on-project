@@ -8,31 +8,37 @@ import { Plus, Minus, Activity } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 
 export default function VitalsCard() {
-  const { vitals } = usePatientContext();
+  const { vitals, activeAppointment, refresh } = usePatientContext();
   const { showToast } = useToast();
   
   // Base weight on last logged, or default to 65kg
-  const initialWeight = vitals ? vitals.weightKg : 65.0;
+  const initialWeight = vitals?.weight ? Number(vitals.weight.value) : 65.0;
   
   const [weight, setWeight] = useState(initialWeight);
   const [showBp, setShowBp] = useState(false);
   const [systolic, setSystolic] = useState('');
   const [diastolic, setDiastolic] = useState('');
   const [saving, setSaving] = useState(false);
-  const [localVitals, setLocalVitals] = useState(vitals);
 
   const handleSave = async () => {
     setSaving(true);
-    const newVitals = {
-      weightKg: weight,
-      ...(showBp && systolic && diastolic ? { bpSystolic: parseInt(systolic), bpDiastolic: parseInt(diastolic) } : {})
-    };
-    
-    await patientService.logVitals(newVitals);
-    setLocalVitals({ ...newVitals, date: new Date().toISOString() });
-    setSaving(false);
-    showToast("Saved. Thanks, Priya!");
-    setShowBp(false);
+
+    const metrics = [{ metricKey: 'weight', value: weight, unit: 'kg' }];
+    if (showBp && systolic && diastolic) {
+      metrics.push({ metricKey: 'blood_pressure_systolic', value: systolic, unit: 'mmHg' });
+      metrics.push({ metricKey: 'blood_pressure_diastolic', value: diastolic, unit: 'mmHg' });
+    }
+
+    try {
+      await patientService.logVitals(metrics, activeAppointment?.id);
+      await refresh();
+      showToast('Vitals saved.');
+      setShowBp(false);
+    } catch (err) {
+      showToast(err.message || 'Could not save your vitals.', 'error');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -61,9 +67,10 @@ export default function VitalsCard() {
         </div>
       </div>
       
-      {localVitals?.date && (
+      {vitals?.weight && (
         <p className="text-xs text-ink-soft mb-4 text-center">
-          Last logged: {localVitals.weightKg} kg · {formatDistanceToNow(new Date(localVitals.date))} ago
+          Last logged: {vitals.weight.value} kg ·{' '}
+          {formatDistanceToNow(new Date(vitals.weight.recorded_at))} ago
         </p>
       )}
 

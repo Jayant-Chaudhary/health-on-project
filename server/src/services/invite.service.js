@@ -26,6 +26,7 @@ async function createAndSendInvite({ appointmentId, patientEmail, patientFullNam
     .insert({
       appointment_id: appointmentId,
       patient_email: patientEmail,
+      patient_full_name: patientFullName || null,
       token,
       expires_at: expiresAt.toISOString(),
     })
@@ -55,7 +56,10 @@ async function createAndSendInvite({ appointmentId, patientEmail, patientFullNam
     console.warn('=> Test Invite Link:', inviteLink);
   }
 
-  return invite;
+  // The link is returned so the clinician UI can show and copy it. SMTP is
+  // best-effort in development, and an invite the doctor cannot hand over is
+  // useless.
+  return { ...invite, inviteLink };
 }
 
 module.exports = { createAndSendInvite };

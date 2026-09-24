@@ -1,6 +1,45 @@
 const supabaseAdmin = require('../config/supabaseAdminClient');
 
 /**
+ * @desc   Describe an invite so the landing page can show what it is for
+ *         before asking for a password. Public: the token is the secret.
+ * @route  GET /api/auth/invite/:token
+ */
+async function getInvite(req, res, next) {
+  try {
+    const { data: invite, error } = await supabaseAdmin
+      .from('appointment_invites')
+      .select('patient_email, patient_full_name, expires_at, used_at, appointments ( scheduled_at )')
+      .eq('token', req.params.token)
+      .maybeSingle();
+
+    if (error) throw error;
+    if (!invite) return res.status(404).json({ error: 'Invite not found' });
+
+    const expired = new Date(invite.expires_at) < new Date();
+
+    // Whether the email already has an account decides what the page asks
+    // for: a new password, or simply a sign-in.
+    const { data: users } = await supabaseAdmin.auth.admin.listUsers();
+    const isReturningPatient = Boolean(
+      users?.users?.some((u) => u.email?.toLowerCase() === invite.patient_email.toLowerCase())
+    );
+
+    res.json({
+      patientEmail: invite.patient_email,
+      patientFullName: invite.patient_full_name,
+      scheduledAt: invite.appointments?.scheduled_at ?? null,
+      expiresAt: invite.expires_at,
+      isUsed: Boolean(invite.used_at),
+      isExpired: expired,
+      isReturningPatient,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
  * @desc   Accept an appointment invite token and set user password
  * @route  POST /auth/accept-invite
  */
@@ -28,32 +67,53 @@ async function acceptInvite(req, res, next) {
 
     const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers();
     let authUser = existingUsers?.users?.find((u) => u.email === invite.patient_email);
+    const isReturningPatient = Boolean(authUser);
 
     if (!authUser) {
       const { data: created, error: createError } = await supabaseAdmin.auth.admin.createUser({
         email: invite.patient_email,
         password,
         email_confirm: true,
+        user_metadata: { full_name: invite.patient_full_name || null },
       });
       if (createError) {
         return res.status(500).json({ error: `Failed to create account: ${createError.message}` });
       }
       authUser = created.user;
-    } else {
-      const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(authUser.id, {
-        password,
-      });
-      if (updateError) {
-        return res.status(500).json({ error: `Failed to set password: ${updateError.message}` });
-      }
     }
 
-    const { error: profileError } = await supabaseAdmin
-      .from('profiles')
-      .upsert({ id: authUser.id, role: 'patient', full_name: authUser.user_metadata?.full_name || null });
+    // A returning patient already has a password. Setting one from an invite
+    // token would let anyone holding a forwarded invite email take over an
+    // existing account, and would silently break the patient's own login on
+    // every new appointment. They are linked to the appointment and told to
+    // sign in instead.
 
-    if (profileError) {
-      return res.status(500).json({ error: `Failed to create profile: ${profileError.message}` });
+    // Create the profile only if there isn't one. Upserting would overwrite a
+    // returning patient's own name and phone with the invite's values.
+    const { data: existingProfile } = await supabaseAdmin
+      .from('profiles')
+      .select('id, full_name')
+      .eq('id', authUser.id)
+      .maybeSingle();
+
+    if (!existingProfile) {
+      const { error: profileError } = await supabaseAdmin.from('profiles').insert({
+        id: authUser.id,
+        role: 'patient',
+        full_name: invite.patient_full_name || null,
+      });
+
+      if (profileError) {
+        return res.status(500).json({ error: `Failed to create profile: ${profileError.message}` });
+      }
+
+      await supabaseAdmin.from('patient_details').upsert({ profile_id: authUser.id });
+    } else if (!existingProfile.full_name && invite.patient_full_name) {
+      // Fill a blank name, never replace one the patient has set.
+      await supabaseAdmin
+        .from('profiles')
+        .update({ full_name: invite.patient_full_name })
+        .eq('id', authUser.id);
     }
 
     if (!invite.appointments.patient_id) {
@@ -69,9 +129,12 @@ async function acceptInvite(req, res, next) {
       .eq('id', invite.id);
 
     res.status(200).json({
-      message: 'Account ready. You can now log in with your new password.',
+      message: isReturningPatient
+        ? 'This appointment has been added to your existing account. Sign in with your current password.'
+        : 'Account ready. You can now log in with your new password.',
       email: invite.patient_email,
       appointmentId: invite.appointments.id,
+      isReturningPatient,
     });
   } catch (err) {
     next(err);
@@ -210,4 +273,6 @@ async function getMe(req, res) {
   res.status(200).json({ user: req.user });
 }
 
-module.exports = { acceptInvite, signup, login, logout, getMe, getInviteDetails };
+module.exports = { acceptInvite, signup, login, logout, getMe,
+  getInvite,
+};

@@ -62,7 +62,7 @@ describe('Questionnaire API', () => {
       });
 
       const response = await request(app)
-        .get('/questionnaire/templates')
+        .get('/api/questionnaire/templates')
         .set('Authorization', `Bearer ${mockToken}`);
 
       expect(response.status).toBe(200);
@@ -92,7 +92,7 @@ describe('Questionnaire API', () => {
       });
 
       const response = await request(app)
-        .post('/questionnaire/responses')
+        .post('/api/questionnaire/responses')
         .set('Authorization', `Bearer ${mockToken}`)
         .send(validPayload);
 
@@ -102,7 +102,7 @@ describe('Questionnaire API', () => {
 
     it('should return 400 for invalid payload', async () => {
       const response = await request(app)
-        .post('/questionnaire/responses')
+        .post('/api/questionnaire/responses')
         .set('Authorization', `Bearer ${mockToken}`)
         .send({ appointmentId: 'appt-123' }); // Missing responses
 
@@ -125,7 +125,7 @@ describe('Questionnaire API', () => {
       });
 
       const response = await request(app)
-        .get('/questionnaire/responses/appt-123')
+        .get('/api/questionnaire/responses/appt-123')
         .set('Authorization', `Bearer ${mockToken}`);
 
       expect(response.status).toBe(200);

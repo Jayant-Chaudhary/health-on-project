@@ -17,9 +17,13 @@ const ocrPayloadSchema = z.object({
   ocrStatus: z.enum(['success', 'partial', 'failed']).default('success'),
 });
 
+const shareReportSchema = z.object({
+  appointmentId: z.string().uuid(),
+});
+
 const reviewMetricSchema = z.object({
   standardKey: z.string().min(1).optional(),
   reviewedValue: z.number().optional(),
 });
 
-module.exports = { ocrPayloadSchema, reviewMetricSchema };
+module.exports = { ocrPayloadSchema, reviewMetricSchema, shareReportSchema };

@@ -4,6 +4,7 @@ import { Avatar } from '../common/Avatar.jsx';
 
 const NAV_ITEMS = [
   { to: '/clinician', label: 'Triage Queue', icon: 'triage', badge: 4, end: true },
+  { to: '/clinician/appointments/new', label: 'New Visit', icon: 'plus' },
   { to: '/clinician/schedule', label: 'Schedule', icon: 'calendar' },
   { to: '/clinician/patients', label: 'Patients', icon: 'users' },
   { to: '/clinician/lab-inbox', label: 'Lab Inbox', icon: 'flask', badge: 12 },
@@ -85,7 +86,7 @@ export function Sidebar({ collapsed, onToggle, clinicianName = 'Dr. E. Rostova',
       </nav>
 
       <div className={`border-t border-line p-3 ${collapsed ? 'flex justify-center' : ''}`}>
-        <NavLink to="/clinician/profile" className="flex items-center gap-3 rounded-xl p-2 transition-colors hover:bg-line/50">
+        <NavLink to="/clinician/profile" className="flex items-center gap-3 rounded-xl p-1 transition-colors hover:bg-line/50">
           <Avatar name={clinicianName} size="sm" tone="cypress" />
           {!collapsed && (
             <div className="min-w-0 flex-1">
