@@ -133,7 +133,7 @@ export default function ProfilePage() {
         </form>
 
         <div className="space-y-6">
-          <VitalsCard />
+          <VitalsCard canEditWeight />
         </div>
       </div>
     </div>

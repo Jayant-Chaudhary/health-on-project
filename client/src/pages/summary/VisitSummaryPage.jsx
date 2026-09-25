@@ -5,13 +5,15 @@ import { useToast } from '../../context/ToastContext';
 import { Card } from '../../components/ui/Card';
 import { Skeleton } from '../../components/ui/Skeleton';
 import { Checkbox } from '../../components/ui/Checkbox';
-import { FileText, ClipboardList, Calendar, ChevronRight } from 'lucide-react';
+import { FileText, ClipboardList, Calendar, ChevronRight, Stethoscope, CheckCircle2 } from 'lucide-react';
 import { format } from 'date-fns';
 
-/** A visit has something to summarise once it is completed or its time has passed. */
+/**
+ * A visit's summary is shared when the doctor ends the visit, which marks it
+ * completed; until then the server returns nothing for it.
+ */
 function isVisited(appointment) {
-  if (appointment.status === 'cancelled') return false;
-  return appointment.status === 'completed' || new Date(appointment.scheduled_at) <= new Date();
+  return appointment.status === 'completed';
 }
 
 export default function VisitSummaryPage() {
@@ -78,7 +80,7 @@ export default function VisitSummaryPage() {
   if (visits.length === 0) {
     return (
       <div className="py-8 text-center">
-        <p className="text-ink-soft">No visit history available yet.</p>
+        <p className="text-ink-soft">No visit summaries yet. Your doctor shares one when they end your visit.</p>
       </div>
     );
   }
@@ -86,6 +88,7 @@ export default function VisitSummaryPage() {
   const notes = summary?.notes?.notes_text;
   const prescriptions = summary?.prescriptions ?? [];
   const nextSteps = summary?.actionItems ?? [];
+  const covered = summary?.consultationChecklist ?? [];
 
   return (
     <div className="py-8 animate-in fade-in duration-300 max-w-6xl mx-auto">
@@ -150,13 +153,40 @@ export default function VisitSummaryPage() {
                     </div>
                   </Card>
 
+                  {covered.length > 0 && (
+                    <Card className="p-6">
+                      <div className="flex items-center gap-2 mb-4 text-ink">
+                        <Stethoscope size={20} className="text-primary" />
+                        <h3 className="font-bold text-lg">Covered in your visit</h3>
+                      </div>
+                      <ul className="space-y-2">
+                        {covered.map((item) => (
+                          <li key={item.id} className="flex items-start gap-2 text-ink">
+                            <CheckCircle2 size={18} className="mt-0.5 shrink-0 text-success" />
+                            <span>{item.label}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </Card>
+                  )}
+
                   {prescriptions.map((prescription) => (
                     <Card key={prescription.id} className="p-6">
                       <h3 className="font-bold text-lg text-ink mb-4">Prescription</h3>
                       {prescription.typed_instructions && (
                         <p className="text-sm text-ink mb-4 whitespace-pre-wrap">{prescription.typed_instructions}</p>
                       )}
-                      {prescription.signed_url && (
+                      {prescription.signed_url && /\.pdf$/i.test(prescription.storage_path ?? '') && (
+                        <a
+                          href={prescription.signed_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-2 text-primary font-medium hover:underline"
+                        >
+                          <FileText size={16} /> Open prescription (PDF)
+                        </a>
+                      )}
+                      {prescription.signed_url && !/\.pdf$/i.test(prescription.storage_path ?? '') && (
                         <a href={prescription.signed_url} target="_blank" rel="noreferrer">
                           <div className="rounded-lg overflow-hidden border border-ink-soft/20 bg-canvas">
                             <img

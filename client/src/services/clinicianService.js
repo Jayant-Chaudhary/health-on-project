@@ -179,6 +179,15 @@ export async function uploadPrescription(appointmentId, file, typedInstructions 
 }
 
 /** Doctor types in a value the OCR pipeline could not read confidently. */
+/**
+ * End the consultation. Marking the visit completed is what publishes the
+ * notes, consultation items, next steps and prescriptions to the patient's
+ * visit summary.
+ */
+export async function endVisit(appointmentId) {
+  return request(`/api/appointments/${appointmentId}/status`, { method: 'PATCH', body: { status: 'completed' } });
+}
+
 export async function resolveTriageAlert(metricId, { standardKey, reviewedValue }) {
   return request(`/api/lab-reports/metrics/${metricId}/review`, {
     method: 'PATCH',

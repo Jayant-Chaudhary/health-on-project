@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Sidebar } from '../../components/layout/Sidebar.jsx';
 import { Topbar } from '../../components/layout/Topbar.jsx';
@@ -7,12 +7,14 @@ import { PreVisitQuestionnairePanel } from '../../components/clinician/PreVisitQ
 import { OcrTriageAlert } from '../../components/clinician/OcrTriageAlert.jsx';
 import { HistoryGrid } from '../../components/clinician/HistoryGrid.jsx';
 import { SlideOver } from '../../components/ui/SlideOver.jsx';
+import { Modal } from '../../components/ui/Modal.jsx';
+import { useToast } from '../../context/ToastContext';
 import { ConsultancyNotes } from '../../components/clinician/ConsultancyNotes.jsx';
 import { ActionChecklist } from '../../components/clinician/ActionChecklist.jsx';
 import { PrescriptionUpload } from '../../components/clinician/PrescriptionUpload.jsx';
 import { Spinner } from '../../components/common/Spinner.jsx';
 import { usePatientDashboard } from '../../hooks/usePatientDashboard.js';
-import { Plus, ArrowLeft, Clock, User, CheckCircle, NotebookPen } from 'lucide-react';
+import { Plus, ArrowLeft, Clock, User, CheckCircle, NotebookPen, CircleStop, BadgeCheck } from 'lucide-react';
 import { buildFlowsheet } from '../../utils/flowsheet.js';
 import {
   fetchPatients,
@@ -23,6 +25,7 @@ import {
   removeConsultationItem,
   uploadPrescription,
   resolveTriageAlert,
+  endVisit,
 } from '../../services/clinicianService.js';
 
 function isToday(value) {
@@ -40,6 +43,12 @@ export function ClinicianDashboard() {
   const [collapsed, setCollapsed] = useState(false);
   const [notesOpen, setNotesOpen] = useState(false);
   const closeNotes = useCallback(() => setNotesOpen(false), []);
+  const [confirmEnd, setConfirmEnd] = useState(false);
+  const [ending, setEnding] = useState(false);
+  const [endError, setEndError] = useState(null);
+  // Set by ConsultancyNotes: saves any notes still waiting on the autosave.
+  const flushNotesRef = useRef(null);
+  const { showToast } = useToast();
   const [appointments, setAppointments] = useState([]);
   const [queueError, setQueueError] = useState(null);
   const [queueLoading, setQueueLoading] = useState(true);
@@ -138,6 +147,34 @@ export function ClinicianDashboard() {
     },
     [appointmentId, patch]
   );
+
+  const handleEndVisit = useCallback(async () => {
+    setEnding(true);
+    setEndError(null);
+    try {
+      // The summary must carry the last words typed, not the last autosave.
+      await flushNotesRef.current?.();
+    } catch {
+      setEndError("Your latest notes couldn't be saved, so the visit is still open. Try again.");
+      setEnding(false);
+      return;
+    }
+    try {
+      await endVisit(appointmentId);
+      patch((current) => ({
+        appointment: { ...current.appointment, status: 'completed' },
+        patient: { ...current.patient, visitStatus: 'completed' },
+      }));
+      setConfirmEnd(false);
+      setNotesOpen(false);
+      showToast("Visit ended. The summary is now on the patient's visit history.", 'success');
+      loadAppointments();
+    } catch (err) {
+      setEndError(err.message || 'Could not end the visit.');
+    } finally {
+      setEnding(false);
+    }
+  }, [appointmentId, patch, showToast, loadAppointments]);
 
   const handleResolveAlert = useCallback(
     async (alert, rawValue) => {
@@ -314,6 +351,25 @@ export function ClinicianDashboard() {
               <span className="h-2 w-2 rounded-full bg-sage" aria-label="has content" />
             )}
           </button>
+
+          {data.appointment?.status === 'completed' ? (
+            <span className="flex items-center gap-2 rounded-xl border border-sage-border bg-sage-surface px-4 py-2 text-label-lg text-sage-ink">
+              <BadgeCheck className="h-4 w-4" />
+              Visit ended · summary shared
+            </span>
+          ) : (
+            <button
+              type="button"
+              onClick={() => {
+                setEndError(null);
+                setConfirmEnd(true);
+              }}
+              className="flex items-center gap-2 rounded-xl bg-cypress px-4 py-2 text-label-lg text-white transition-colors hover:bg-cypress-deep"
+            >
+              <CircleStop className="h-4 w-4" />
+              End visit
+            </button>
+          )}
         </div>
 
         <PatientHeaderCard patient={data.patient} />
@@ -334,6 +390,7 @@ export function ClinicianDashboard() {
           <ConsultancyNotes
             notes={data.notes}
             onSave={handleSaveNotes}
+            flushRef={flushNotesRef}
             templates={data.consultationTemplates}
             checkedItems={data.consultationItems}
             onCheckItem={handleCheckConsultation}
@@ -347,6 +404,50 @@ export function ClinicianDashboard() {
           />
           <PrescriptionUpload prescriptions={data.prescriptions} onUpload={handleUploadPrescription} />
         </SlideOver>
+
+        <Modal isOpen={confirmEnd} onClose={() => !ending && setConfirmEnd(false)} title="End this visit?">
+          <p className="text-body-md text-ink-2">
+            {data.patient.name} will see this on their visit history as soon as you end the visit:
+          </p>
+          <ul className="mt-3 space-y-1.5 text-body-md text-ink">
+            <li>
+              <span className="font-semibold">Doctor's notes:</span>{' '}
+              {data.notes.text.trim() ? 'included' : <span className="text-ink-3">none written</span>}
+            </li>
+            <li>
+              <span className="font-semibold">Covered in the consultation:</span> {data.consultationItems.length} item
+              {data.consultationItems.length === 1 ? '' : 's'}
+            </li>
+            <li>
+              <span className="font-semibold">Next steps for the patient:</span> {data.actionItems.length}
+            </li>
+            <li>
+              <span className="font-semibold">Prescriptions:</span> {data.prescriptions.length}
+            </li>
+          </ul>
+          <p className="mt-3 text-body-sm text-ink-3">
+            You can still edit the notes afterwards; the patient's summary updates with them.
+          </p>
+          {endError && <p className="mt-3 text-body-sm text-terracotta">{endError}</p>}
+          <div className="mt-5 flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setConfirmEnd(false)}
+              disabled={ending}
+              className="rounded-xl border border-line px-4 py-2 text-label-lg text-ink-2 hover:bg-subcanvas disabled:opacity-50"
+            >
+              Keep visit open
+            </button>
+            <button
+              type="button"
+              onClick={handleEndVisit}
+              disabled={ending}
+              className="rounded-xl bg-cypress px-4 py-2 text-label-lg text-white hover:bg-cypress-deep disabled:opacity-60"
+            >
+              {ending ? 'Ending…' : 'End visit and share summary'}
+            </button>
+          </div>
+        </Modal>
       </div>
     );
   };
