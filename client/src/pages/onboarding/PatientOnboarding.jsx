@@ -27,7 +27,7 @@ export default function PatientOnboarding() {
       const result = await completeOnboarding(formData, 'patient');
       if (!result.success) throw result.error;
       
-      navigate('/');
+      navigate('/', { replace: true });
     } catch (err) {
       setError(err.message || 'Failed to update profile.');
     } finally {
@@ -73,7 +73,7 @@ export default function PatientOnboarding() {
           type="button"
           onClick={async () => {
             await logout();
-            navigate('/login');
+            navigate('/login', { replace: true });
           }}
           className="w-full mt-4 text-sm font-medium text-ink-3 hover:text-ink-2 transition-colors"
         >

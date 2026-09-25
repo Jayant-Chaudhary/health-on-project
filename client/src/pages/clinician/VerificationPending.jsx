@@ -1,8 +1,37 @@
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Button } from '../../components/ui/Button';
-import { useAuth } from '../../hooks/useAuth';
+import { useAuthContext } from '../../context/AuthContext';
+import { request } from '../../services/apiClient';
 
 export default function VerificationPending() {
-  const { logout } = useAuth();
+  const { logout, refreshProfile } = useAuthContext();
+  const navigate = useNavigate();
+  const [verifying, setVerifying] = useState(false);
+  const [error, setError] = useState(null);
+
+  /**
+   * Demo only: verifies this account on the spot instead of waiting for an
+   * administrator. The API refuses once DEMO_SELF_VERIFY=false.
+   */
+  async function handleDemoVerify() {
+    setVerifying(true);
+    setError(null);
+    try {
+      await request('/api/profile/demo-verify', { method: 'POST' });
+      // The route guard reads verification from the loaded profile.
+      await refreshProfile();
+      navigate('/clinician', { replace: true });
+    } catch (err) {
+      setError(err.message || 'Could not verify your account.');
+      setVerifying(false);
+    }
+  }
+
+  async function handleLogout() {
+    await logout();
+    navigate('/login', { replace: true });
+  }
 
   return (
     <div className="max-w-md w-full mx-auto p-8 bg-raised rounded-xl shadow-sm border border-line mt-12 text-center">
@@ -11,13 +40,23 @@ export default function VerificationPending() {
       </div>
       <h2 className="text-2xl font-bold text-ink mb-2">Verification Pending</h2>
       <p className="text-ink-2 mb-8">
-        Your medical credentials are currently being verified with the National Medical Commission. 
+        Your medical credentials are currently being verified with the National Medical Commission.
         You will receive an email once your account has been approved to take patients.
       </p>
-      
-      <Button onClick={logout} variant="outline" className="w-full">
-        Sign Out
-      </Button>
+
+      <div className="space-y-3">
+        <Button onClick={handleDemoVerify} isLoading={verifying} className="w-full">
+          {verifying ? 'Verifying…' : 'Verify my account (demo)'}
+        </Button>
+        <p className="text-xs text-ink-3">
+          Demo shortcut: skips the medical council check and verifies this account immediately.
+        </p>
+        {error && <p className="text-sm text-attention-dark">{error}</p>}
+
+        <Button onClick={handleLogout} variant="secondary" className="w-full" disabled={verifying}>
+          Sign Out
+        </Button>
+      </div>
     </div>
   );
 }

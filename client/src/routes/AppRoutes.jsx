@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import ProtectedRoute from './ProtectedRoute';
+import PublicOnlyRoute from './PublicOnlyRoute';
 import AppShell from '../layouts/AppShell';
 import CheckinLayout from '../layouts/CheckinLayout';
 import AuthLayout from '../layouts/AuthLayout';
@@ -36,7 +37,8 @@ export function AppRoutes() {
   return (
     <Routes>
       {/* Public Auth Routes */}
-      <Route element={<AuthLayout />}>
+      {/* Signed-in users are sent home, so Back after login cannot reach these. */}
+      <Route element={<PublicOnlyRoute><AuthLayout /></PublicOnlyRoute>}>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<SignupPage />} />
       </Route>

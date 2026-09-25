@@ -31,9 +31,9 @@ export default function LoginPage() {
       
       const activeRole = profile?.role || user?.user_metadata?.role;
       if (activeRole === 'clinician') {
-        navigate('/clinician');
+        navigate('/clinician', { replace: true });
       } else {
-        navigate('/');
+        navigate('/', { replace: true });
       }
     } catch (err) {
       setError(err.message || 'Failed to login. Please check your credentials.');

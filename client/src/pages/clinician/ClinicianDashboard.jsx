@@ -14,7 +14,7 @@ import { ActionChecklist } from '../../components/clinician/ActionChecklist.jsx'
 import { PrescriptionUpload } from '../../components/clinician/PrescriptionUpload.jsx';
 import { Spinner } from '../../components/common/Spinner.jsx';
 import { usePatientDashboard } from '../../hooks/usePatientDashboard.js';
-import { Plus, ArrowLeft, Clock, User, CheckCircle, NotebookPen, CircleStop, BadgeCheck } from 'lucide-react';
+import { Plus, ArrowLeft, Clock, User, CheckCircle, NotebookPen, CircleStop, BadgeCheck, UserCheck } from 'lucide-react';
 import { buildFlowsheet } from '../../utils/flowsheet.js';
 import {
   fetchPatients,
@@ -27,6 +27,24 @@ import {
   resolveTriageAlert,
   endVisit,
 } from '../../services/clinicianService.js';
+
+/**
+ * Where a visit is in its day, for the badge on today's cards. `isPending`
+ * wins over the stored status: an unaccepted invite cannot be opened yet.
+ */
+function visitStage(appointment) {
+  if (appointment.isPending) {
+    return { label: 'Pending', note: 'Invited patient', Icon: Clock, badge: 'bg-attention-light text-attention-dark' };
+  }
+  switch (appointment.status) {
+    case 'completed':
+      return { label: 'Completed', note: 'Visit completed', Icon: BadgeCheck, badge: 'bg-sage-surface text-sage-ink' };
+    case 'checked_in':
+      return { label: 'Checked in', note: 'Ready to be seen', Icon: UserCheck, badge: 'bg-primary-light text-primary-dark' };
+    default:
+      return { label: 'Accepted', note: 'Registered patient', Icon: CheckCircle, badge: 'bg-success-light text-success-dark' };
+  }
+}
 
 function isToday(value) {
   return value && new Date(value).toDateString() === new Date().toDateString();
@@ -221,10 +239,17 @@ export function ClinicianDashboard() {
 
     return (
       <div className="flex-1 overflow-y-auto">
-        <h2 className="text-xl font-display font-semibold text-ink mb-6">Today's Appointments</h2>
+        <div className="mb-6 flex flex-wrap items-baseline justify-between gap-2">
+          <h2 className="text-xl font-display font-semibold text-ink">Today's Appointments</h2>
+          <p className="text-body-sm text-ink-3 tabular">
+            {todays.filter((a) => a.status === 'completed').length} of {todays.length} completed
+          </p>
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {todays.map((appointment) => {
             const isPending = appointment.isPending;
+            const isCompleted = !isPending && appointment.status === 'completed';
+            const stage = visitStage(appointment);
 
             return (
               <div
@@ -233,7 +258,9 @@ export function ClinicianDashboard() {
                 className={`card p-6 flex flex-col gap-4 border transition-all duration-200 ${
                   isPending
                     ? 'border-ink-soft/20 bg-canvas-alt opacity-75 cursor-not-allowed'
-                    : 'border-primary/10 hover:border-primary/30 hover:shadow-md cursor-pointer'
+                    : isCompleted
+                      ? 'border-sage-border bg-sage-surface/40 cursor-pointer hover:shadow-md'
+                      : 'border-primary/10 hover:border-primary/30 hover:shadow-md cursor-pointer'
                 }`}
               >
                 <div className="flex items-start justify-between">
@@ -243,20 +270,14 @@ export function ClinicianDashboard() {
                     </div>
                     <div>
                       <h3 className="font-semibold text-ink">{appointment.name}</h3>
-                      <p className="text-xs text-ink-soft truncate w-32">
-                        {isPending ? 'Invited patient' : 'Registered patient'}
-                      </p>
+                      <p className="text-xs text-ink-soft truncate w-32">{stage.note}</p>
                     </div>
                   </div>
-                  {isPending ? (
-                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-attention-light text-attention-dark text-xs font-medium">
-                      <Clock className="w-3 h-3" /> Pending
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-success-light text-success-dark text-xs font-medium">
-                      <CheckCircle className="w-3 h-3" /> Accepted
-                    </span>
-                  )}
+                  <span
+                    className={`inline-flex shrink-0 items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${stage.badge}`}
+                  >
+                    <stage.Icon className="w-3 h-3" /> {stage.label}
+                  </span>
                 </div>
 
                 <div className="flex items-center gap-2 text-sm text-ink-2">
@@ -269,6 +290,12 @@ export function ClinicianDashboard() {
                 {isPending && (
                   <p className="text-xs text-attention mt-2">
                     Patient has not accepted their invite yet. Report Analysis will be available once they accept.
+                  </p>
+                )}
+
+                {isCompleted && (
+                  <p className="text-xs text-sage-ink mt-2">
+                    Summary sent to the patient. Open to review the visit.
                   </p>
                 )}
               </div>
@@ -372,11 +399,14 @@ export function ClinicianDashboard() {
           )}
         </div>
 
-        <PatientHeaderCard patient={data.patient} />
-        {data.questionnaire.answers.length > 0 && <PreVisitQuestionnairePanel questionnaire={data.questionnaire} />}
-
-        {/* One work column; it scrolls on its own while the frame stays put. */}
-        <div className="scroll-column mt-4 min-h-0 flex-1 space-y-4 pr-1">
+        {/*
+          Only the action bar above stays put. Patient details and the
+          questionnaire scroll away with the data, so the clinical history
+          gets the whole height once the doctor starts reading it.
+        */}
+        <div className="scroll-column min-h-0 flex-1 space-y-4 pr-1">
+          <PatientHeaderCard patient={data.patient} />
+          {data.questionnaire.answers.length > 0 && <PreVisitQuestionnairePanel questionnaire={data.questionnaire} />}
           <OcrTriageAlert alerts={data.triageAlerts} onResolve={handleResolveAlert} />
           <HistoryGrid flowsheet={data.flowsheet} patientId={data.patient.id} />
         </div>

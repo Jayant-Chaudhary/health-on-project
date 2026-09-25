@@ -83,9 +83,9 @@ export default function SignupPage() {
       }
       
       if (role === 'clinician') {
-        navigate('/clinician');
+        navigate('/clinician', { replace: true });
       } else {
-        navigate('/');
+        navigate('/', { replace: true });
       }
     } catch (err) {
       setError(err.message || 'Failed to create account.');

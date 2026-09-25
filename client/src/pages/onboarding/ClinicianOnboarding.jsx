@@ -31,7 +31,7 @@ export default function ClinicianOnboarding() {
       if (!result.success) throw result.error;
       
       // Redirect to the pending verification screen or dashboard
-      navigate('/clinician');
+      navigate('/clinician', { replace: true });
     } catch (err) {
       setError(err.message || 'Failed to update profile.');
     } finally {
@@ -106,7 +106,7 @@ export default function ClinicianOnboarding() {
           type="button"
           onClick={async () => {
             await logout();
-            navigate('/login');
+            navigate('/login', { replace: true });
           }}
           className="w-full mt-4 text-sm font-medium text-ink-3 hover:text-ink-2 transition-colors"
         >

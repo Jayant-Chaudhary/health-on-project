@@ -38,4 +38,8 @@ module.exports = {
     timeoutMs: Number(process.env.OCR_TIMEOUT_MS || 180000),
   },
   maxUploadBytes: Number(process.env.MAX_UPLOAD_BYTES || 20 * 1024 * 1024),
+  // Demo only: lets a clinician verify their own account from the
+  // verification-pending page. Set DEMO_SELF_VERIFY=false to switch it off
+  // once real (administrator) verification is in place.
+  demoSelfVerify: process.env.DEMO_SELF_VERIFY !== 'false',
 };

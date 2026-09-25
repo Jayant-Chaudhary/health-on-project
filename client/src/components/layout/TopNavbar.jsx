@@ -12,7 +12,7 @@ export default function TopNavbar() {
   
   const handleLogout = async () => {
     await logout();
-    navigate('/login');
+    navigate('/login', { replace: true });
   };
   
   // Nudge the patient while a selected visit still needs checking in.
