@@ -1,0 +1,25 @@
+services:
+
+  PaddleOCR:
+    build:
+      # Repository root, so the image can include the ../ocr pipeline.
+      context: ..
+      dockerfile: PaddleOCRFastAPI/Dockerfile
+    container_name: paddle_ocr_api # 自定义容器名
+    image: paddleocrfastapi:2025 # 使用刚才构建的镜像
+    environment:
+      - TZ=Asia/Hong_Kong
+      - PADDLE_PDX_MODEL_SOURCE=BOS
+      - PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK=True
+      # - OCR_DET_MODEL=PP-OCRv6_medium_det   # on a GPU host
+      # - OCR_REC_MODEL=PP-OCRv6_medium_rec
+    ports:
+      # Loopback only: the Node backend is the only intended client. Put the
+      # backend on the same Docker network instead of publishing publicly.
+      - 127.0.0.1:8000:8000
+    volumes:
+      - paddleocr_models:/root/.paddlex  # 持久化存储 OCR 模型
+    restart: unless-stopped
+volumes:
+  paddleocr_models:
+    driver: local

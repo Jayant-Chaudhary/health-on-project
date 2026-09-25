@@ -1,4 +1,4 @@
-﻿const request = require('supertest');
+const request = require('supertest');
 const app = require('../app');
 const supabaseAdmin = require('../config/supabaseAdminClient');
 const ocrService = require('../services/ocrService');
@@ -40,11 +40,11 @@ describe('OCR API Integration', () => {
     });
   };
 
-  describe('GET /ocr/health', () => {
+  describe('GET /api/ocr/health', () => {
     it('returns 200 with { healthy: true } when OCR service is up', async () => {
       ocrService.checkOcrHealth.mockResolvedValue(true);
 
-      const response = await request(app).get('/ocr/health');
+      const response = await request(app).get('/api/ocr/health');
 
       expect(response.status).toBe(200);
       expect(response.body).toEqual({ healthy: true });
@@ -53,17 +53,17 @@ describe('OCR API Integration', () => {
     it('returns 503 with { healthy: false } when OCR service is down', async () => {
       ocrService.checkOcrHealth.mockResolvedValue(false);
 
-      const response = await request(app).get('/ocr/health');
+      const response = await request(app).get('/api/ocr/health');
 
       expect(response.status).toBe(503);
       expect(response.body).toEqual({ healthy: false });
     });
   });
 
-  describe('POST /ocr/recognize', () => {
+  describe('POST /api/ocr/recognize', () => {
     it('returns 401 if missing authentication', async () => {
       const response = await request(app)
-        .post('/ocr/recognize')
+        .post('/api/ocr/recognize')
         .attach('file', Buffer.from('fake-image-data'), 'test.jpg');
 
       expect(response.status).toBe(401);
@@ -73,7 +73,7 @@ describe('OCR API Integration', () => {
       setupAuthMock();
 
       const response = await request(app)
-        .post('/ocr/recognize')
+        .post('/api/ocr/recognize')
         .set('Authorization', `Bearer ${mockToken}`)
         .send({ somethingElse: 'value' });
 
@@ -85,7 +85,7 @@ describe('OCR API Integration', () => {
       setupAuthMock();
 
       const response = await request(app)
-        .post('/ocr/recognize')
+        .post('/api/ocr/recognize')
         .set('Authorization', `Bearer ${mockToken}`)
         .attach('file', Buffer.from('fake-pdf'), { filename: 'test.pdf', contentType: 'application/pdf' });
 
@@ -105,7 +105,7 @@ describe('OCR API Integration', () => {
       ocrService.extractFromFile.mockResolvedValue(mockOcrResult);
 
       const response = await request(app)
-        .post('/ocr/recognize')
+        .post('/api/ocr/recognize')
         .set('Authorization', `Bearer ${mockToken}`)
         .attach('file', Buffer.from('fake-image-data'), { filename: 'test.jpg', contentType: 'image/jpeg' });
 
@@ -129,7 +129,7 @@ describe('OCR API Integration', () => {
       ocrService.extractFromFile.mockRejectedValue(serviceError);
 
       const response = await request(app)
-        .post('/ocr/recognize')
+        .post('/api/ocr/recognize')
         .set('Authorization', `Bearer ${mockToken}`)
         .attach('file', Buffer.from('fake-image-data'), { filename: 'test.jpg', contentType: 'image/jpeg' });
 
@@ -143,7 +143,7 @@ describe('OCR API Integration', () => {
       ocrService.extractFromFile.mockResolvedValue({}); // Empty payload
 
       const response = await request(app)
-        .post('/ocr/recognize')
+        .post('/api/ocr/recognize')
         .set('Authorization', `Bearer ${mockToken}`)
         .attach('file', Buffer.from('fake-image-data'), { filename: 'test.jpg', contentType: 'image/jpeg' });
 

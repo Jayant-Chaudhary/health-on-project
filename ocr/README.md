@@ -3,6 +3,9 @@
 Turns an uploaded lab report into the JSON object the Express backend ingests
 at `POST /lab-reports`. Two extraction engines, one router.
 
+In production this is served by `../PaddleOCRFastAPI` at `POST /document/process`
+(see `server/OCR_INTEGRATION.md`), so the OCR models stay loaded between uploads.
+
 ```
 ocr/
 ├── document_processor.py   # the router - the only module the backend calls
@@ -23,6 +26,10 @@ pdf ──► digital engine ──► ok / partial ─────────�
 
 File type comes from the leading bytes first and the extension second - phone
 uploads mislabel formats often enough that trusting the suffix is a bug.
+
+A digital PDF whose text yields **no test rows** (typically a digital
+letterhead over a scanned body) is also run through OCR, and whichever reading
+found more test rows wins.
 
 `partial` is kept on the digital engine on purpose: some pages garbled means
 most pages are fine, and rasterising a readable PDF loses more than it gains.
@@ -75,8 +82,9 @@ python document_processor.py report.pdf \
     --storage-path lab-reports/abc.pdf                   # the POST body
 ```
 
-Exit code is 0 unless `status` is `failed`, so the Node side can shell out to
-it and branch on the exit status.
+Exit code is 0 unless `status` is `failed`. stdout carries exactly one JSON
+document: the engines' own logging (including Paddle's C++ runtime, which
+writes straight to file descriptor 1) is redirected to stderr while they run.
 
 ## Testing
 
@@ -115,7 +123,7 @@ python -c "import ocr_extractor; print(ocr_extractor.verify_gpu_status())"
 python document_processor.py /path/to/real-scan.jpg --quiet
 ```
 
-`verify_gpu_status()` prints and returns the device actually chosen: `gpu`
+`verify_gpu_status()` logs and returns the device actually chosen: `gpu`
 when Paddle has CUDA *and* a device is visible, `cpu` otherwise. `OCR_DEVICE=cpu`
 forces CPU on a GPU machine. CPU works end to end - it is just slower.
 
@@ -131,10 +139,23 @@ missing and columns had to be inferred from whitespace.
 ## Engine behaviour worth knowing
 
 - **Device.** OCR autodetects: GPU when Paddle is built with CUDA *and* a
-  device is visible, CPU otherwise. `OCR_DEVICE=cpu` forces CPU. Requires
-  PaddleOCR 3.x (`use_textline_orientation` / `device` are 3.x kwargs).
+  device is visible, CPU otherwise. `OCR_DEVICE=cpu` forces CPU.
+- **Test rows.** Recognized: abnormal flags in their own column or glued to
+  the value (`11.2 L`, `*11.2`, `↑11.2`) - split into `metrics[].flag`;
+  digit-grouped values (`1,50,000`); qualitative results (`Negative`,
+  `Non Reactive`, `Pale Yellow`); a leading serial-number column. A `Note:` /
+  `Comments:` block ends at the next test row or page break.
+- **Zero metrics.** A document with text but no recognizable test rows is
+  `partial`, not `success`, so it reaches a clinician for review.
 - **Model loading.** `PaddleOCR` instances are cached per (device, lang), so
-  the model loads once per process rather than once per document.
+  the model loads once per process rather than once per document - which only
+  pays off in a long-lived process such as the FastAPI service, not the CLI.
+  Calls are serialized by a lock, so one instance is safe under a thread pool.
+- **Models.** PP-OCRv6 small det/rec by default (~10s a page on CPU, versus
+  ~80s for the medium models with no loss on our samples); override with
+  `OCR_DET_MODEL` / `OCR_REC_MODEL`. Document orientation and UVDoc unwarping
+  are off by default (`OCR_DOC_ORIENTATION` / `OCR_DOC_UNWARPING` to enable).
+  Requires PaddleOCR >= 3.7.
 - **Geometry.** OCR results keep their detection boxes in `pages[].items[]`,
   and the router structures them with tolerances scaled from the median box
   height. Payloads without boxes fall back to inferring columns from

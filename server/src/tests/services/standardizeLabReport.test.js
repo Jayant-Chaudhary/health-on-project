@@ -287,3 +287,66 @@ describe('standardizeMetrics', () => {
     expect(freshSupabase.from).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('parseNumericValue', () => {
+  const { parseNumericValue } = require('../../services/standardization/standardizeLabReport.service');
+
+  it.each([
+    ['1,50,000', 150000], // Indian digit grouping
+    ['150,000', 150000],
+    ['7,500.5', 7500.5],
+    ['13,5', 13.5], // decimal comma
+    ['11.2', 11.2],
+    ['.5', 0.5],
+    [' 92 ', 92],
+    [7, 7],
+  ])('reads %p as %p', (raw, expected) => {
+    expect(parseNumericValue(raw)).toEqual({ value: expected, inexact: false });
+  });
+
+  it.each(['<0.5', '> 200', '>=200', '≤ 1.0'])('reads %p as an inexact bound', (raw) => {
+    const { value, inexact } = parseNumericValue(raw);
+    expect(Number.isNaN(value)).toBe(false);
+    expect(inexact).toBe(true);
+  });
+
+  it.each(['12.0 - 15.5', 'Non Reactive', '11.2 L', '', null, undefined])(
+    'rejects %p instead of truncating it',
+    (raw) => {
+      expect(Number.isNaN(parseNumericValue(raw).value)).toBe(true);
+    }
+  );
+});
+
+describe('standardizeMetrics value parsing', () => {
+  let standardizeMetrics;
+
+  beforeEach(() => {
+    jest.resetModules();
+    jest.mock('../../config/supabaseAdminClient', () => ({ from: jest.fn() }));
+    jest.mock('../../config/env', () => ({ ocrMetricReviewThreshold: 0.75 }));
+    ({ standardizeMetrics } = require('../../services/standardization/standardizeLabReport.service'));
+    require('../../config/supabaseAdminClient').from.mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      eq: jest.fn().mockResolvedValue({
+        data: [
+          { standard_key: 'platelets', aliases: ['Platelet Count'], unit_standard: '/cumm' },
+          { standard_key: 'crp', aliases: ['CRP'], unit_standard: 'mg/l' },
+        ],
+        error: null,
+      }),
+    });
+  });
+
+  it('parses an Indian-grouped platelet count in full', async () => {
+    const [metric] = await standardizeMetrics([{ key: 'Platelet Count', value: '1,50,000', unit: '/cumm' }]);
+    expect(metric.parsed_value).toBe(150000);
+    expect(metric.needs_review).toBe(false);
+  });
+
+  it('sends a "<" bound to review rather than recording it as exact', async () => {
+    const [metric] = await standardizeMetrics([{ key: 'CRP', value: '<0.5', unit: 'mg/l' }]);
+    expect(metric.parsed_value).toBe(0.5);
+    expect(metric.needs_review).toBe(true);
+  });
+});

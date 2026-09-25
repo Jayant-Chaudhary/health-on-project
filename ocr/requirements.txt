@@ -1,10 +1,15 @@
+# The pipeline is served by ../PaddleOCRFastAPI (see its requirements.txt,
+# which includes everything below). This file is for running the pipeline or
+# its tests on their own.
+
 # Digital-PDF branch
 pdfplumber>=0.10.0
 PyMuPDF>=1.24.0        # optional but recommended: second extraction candidate
 packaging>=21.0        # version check for pdfplumber's expand_ligatures
 
-# Scanned/image branch (GPU). Install the paddlepaddle build that matches the
-# host CUDA version - see https://www.paddlepaddle.org.cn/install/quick
-# e.g. python -m pip install paddlepaddle-gpu==3.0.0 -i https://www.paddlepaddle.org.cn/packages/stable/cu126/
-paddlepaddle-gpu>=3.0.0
-paddleocr>=3.0.0
+# Scanned/image branch. PaddleOCR >= 3.7 for the PP-OCRv6 models used by default.
+# CPU build below. On a GPU host, replace it with the paddlepaddle-gpu build that
+# matches the host CUDA version - see https://www.paddlepaddle.org.cn/install/quick
+# e.g. python -m pip install paddlepaddle-gpu==3.2.0 -i https://www.paddlepaddle.org.cn/packages/stable/cu126/
+paddlepaddle>=3.2.0
+paddleocr>=3.7.0

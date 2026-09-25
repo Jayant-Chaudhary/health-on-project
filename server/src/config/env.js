@@ -31,13 +31,10 @@ module.exports = {
   inviteTokenTtlHours: Number(process.env.INVITE_TOKEN_TTL_HOURS || 72),
   ocrMetricReviewThreshold: Number(process.env.OCR_CONFIDENCE_REVIEW_THRESHOLD || 0.75),
   ocr: {
-    // The pipeline runs out-of-process; point these at the interpreter that
-    // has its dependencies installed (see ocr/requirements.txt).
-    pythonBin: process.env.OCR_PYTHON_BIN || 'python3',
-    scriptPath:
-      process.env.OCR_SCRIPT_PATH ||
-      require('path').resolve(__dirname, '../../../ocr/document_processor.py'),
-    timeoutMs: Number(process.env.OCR_TIMEOUT_MS || 120000),
+    // Extraction runs in the OCR service (PaddleOCRFastAPI) at ocrServiceUrl.
+    // A multi-page scan on CPU takes ~10s a page, and uploads queue behind
+    // each other there, so this is generous on purpose.
+    timeoutMs: Number(process.env.OCR_TIMEOUT_MS || 180000),
   },
   maxUploadBytes: Number(process.env.MAX_UPLOAD_BYTES || 20 * 1024 * 1024),
 };

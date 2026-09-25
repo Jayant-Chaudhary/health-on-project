@@ -474,8 +474,12 @@ class TestPageSeparation(TempFileCase):
         ]
 
     def test_pages_are_not_merged_by_the_line_grouper(self):
-        install_stubs(self, digital=FakeDocumentResult(tokens=self.collide(), pages_processed=2))
+        # No test rows on either page, so the router also tries OCR; an OCR
+        # result with nothing in it keeps this on the digital reading.
+        install_stubs(self, digital=FakeDocumentResult(tokens=self.collide(), pages_processed=2),
+                      ocr=ocr_payload(lines=[]))
         result = dp.process_document(self.make_pdf())
+        self.assertEqual(result["engine"], "digital")
         self.assertEqual(len(result["pages"]), 2)
         self.assertEqual(result["pages"][0]["text"], "PageOneValue")
         self.assertEqual(result["pages"][1]["text"], "PageTwoValue")

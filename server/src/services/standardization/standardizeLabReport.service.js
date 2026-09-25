@@ -99,12 +99,41 @@ function findDictionaryEntry(dictionary, rawKey, tokenSortIndex) {
   return standardKey ? dictionary.find((entry) => entry.standard_key === standardKey) : undefined;
 }
 
+/**
+ * Numeric reading of a printed result, or NaN when it has none.
+ *
+ * `parseFloat` alone reads "1,50,000" (Indian digit grouping) as 1 and
+ * "<0.5" as NaN. Comparator-prefixed values ("<0.5", ">200") are parsed but
+ * reported as `inexact`: the printed number is a bound, not the measurement,
+ * so it goes to a clinician rather than straight onto a trend chart.
+ */
+function parseNumericValue(value) {
+  if (typeof value === 'number') return { value, inexact: false };
+  if (typeof value !== 'string') return { value: NaN, inexact: false };
+
+  let text = value.trim();
+  const inexact = /^[<>≤≥]/.test(text);
+  text = text.replace(/^[<>≤≥]=?\s*/, '');
+
+  if (/^[-+]?\d{1,3}(,\d{2})*,\d{3}(\.\d+)?$/.test(text)) {
+    // Digit grouping: "1,50,000", "150,000", "7,500.5".
+    text = text.replace(/,/g, '');
+  } else if (/^[-+]?\d+,\d{1,2}$/.test(text)) {
+    // Decimal comma: "13,5".
+    text = text.replace(',', '.');
+  }
+
+  // Whole-string match, so "12.0 - 15.5" or "11.2 L" are not silently truncated.
+  if (!/^[-+]?(\d+\.?\d*|\.\d+)$/.test(text)) return { value: NaN, inexact };
+  return { value: Number(text), inexact };
+}
+
 async function standardizeMetrics(rawMetrics) {
   const dictionary = await loadDictionary();
 
   return rawMetrics.map((metric) => {
     const entry = findDictionaryEntry(dictionary, metric.key, tokenSortIndexCache);
-    const numericValue = typeof metric.value === 'number' ? metric.value : parseFloat(metric.value);
+    const { value: numericValue, inexact } = parseNumericValue(metric.value);
     const hasNumericValue = !Number.isNaN(numericValue);
 
     if (!entry) {
@@ -128,7 +157,7 @@ async function standardizeMetrics(rawMetrics) {
     const belowConfidenceThreshold =
       typeof metric.confidence === 'number' && metric.confidence < env.ocrMetricReviewThreshold;
 
-    const needsReview = !hasNumericValue || unitConversionFailed || belowConfidenceThreshold;
+    const needsReview = !hasNumericValue || inexact || unitConversionFailed || belowConfidenceThreshold;
 
     return {
       raw_key: metric.key,
@@ -148,6 +177,7 @@ module.exports = {
   loadDictionary,
   // Exported for tests: matching behaviour is worth asserting directly.
   normalizeKey,
+  parseNumericValue,
   tokenSortKey,
   buildTokenSortIndex,
   findDictionaryEntry,

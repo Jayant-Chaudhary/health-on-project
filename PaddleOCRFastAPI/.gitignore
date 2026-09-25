@@ -1,0 +1,9 @@
+__pycache__/
+test.py
+.venv/
+venv/
+
+# Upstream (neozhu/PaddleOCRFastAPI) sample documents - not part of this project.
+*.pdf
+Products_page_1_raw.txt
+Products_tables.json

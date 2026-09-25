@@ -120,9 +120,30 @@ def split_fields(line: Line, x_gap: float = 15.0) -> list[Field]:
 # ------------------------------------------------------------------
 # Pattern primitives
 # ------------------------------------------------------------------
+#: One number: digit-grouped ("1,50,000" Indian, "150,000" Western) or plain
+#: with an optional decimal part ("13.5", or "13,5" from a decimal-comma locale).
+_NUM = r"(?:\d{1,3}(?:,\d{2})*,\d{3}(?:\.\d+)?|\d+(?:[.,]\d+)?)"
 _NUMBER_RE = re.compile(
-    r"^[<>≤≥]?\s*[-+]?\d+(?:[.,]\d+)?(?:\s*[-–]\s*\d+(?:[.,]\d+)?)?$"
+    rf"^[<>≤≥]?\s*[-+]?{_NUM}(?:\s*[-–]\s*{_NUM})?$"
 )
+
+#: Abnormal-result markers labs print beside (or glued to) a value. They are
+#: exactly the rows a clinician most needs, so they must not break parsing.
+_FLAG_WORDS = {"h", "l", "hh", "ll", "high", "low", "abnormal", "critical", "crit"}
+_FLAG_SYMBOL_RE = re.compile(r"^(?:\*+|[↑↓]+)$")
+#: A value with its flag attached: "11.2 L", "11.2L", "*11.2", "11.2*", "↑11.2".
+_FLAGGED_VALUE_RE = re.compile(
+    r"^(?P<pre>\*+|[↑↓])?\s*(?P<num>[<>≤≥]?\s*[-+]?" + _NUM + r")\s*"
+    r"(?P<post>\*+|[↑↓]|(?i:hh|ll|h|l|high|low|abnormal|critical|crit))?$"
+)
+
+#: Non-numeric results that are still a test's answer (urinalysis, serology).
+_QUALITATIVE_VALUES = {
+    "negative", "positive", "reactive", "non reactive", "non-reactive", "nonreactive",
+    "nil", "absent", "present", "trace", "detected", "not detected", "normal",
+    "clear", "turbid", "slightly turbid", "hazy", "pale yellow", "yellow",
+    "straw", "amber", "dark yellow", "colourless", "colorless",
+}
 _UNIT_RE = re.compile(r"^[A-Za-z%/µμ^0-9.·×*\[\]]+$")
 _REF_RANGE_RE = re.compile(r"\d+(?:\.\d+)?\s*[-–]\s*\d+(?:\.\d+)?")
 _REF_COMPARE_RE = re.compile(r"[<>≤≥]\s*\d+(?:\.\d+)?")
@@ -166,12 +187,53 @@ def is_noise(line: Line) -> bool:
     return False
 
 
+def is_flag(s: str) -> bool:
+    s = s.strip()
+    return s.lower() in _FLAG_WORDS or bool(_FLAG_SYMBOL_RE.match(s))
+
+
+def split_value_flag(s: str) -> tuple[str, str | None] | None:
+    """("11.2", "L") for "11.2 L"; ("13.5", None) for a bare number; else None."""
+    s = s.strip()
+    if looks_like_number(s):
+        return s, None
+    match = _FLAGGED_VALUE_RE.match(s)
+    if not match:
+        return None
+    flag = match.group("pre") or match.group("post")
+    return match.group("num").strip(), flag
+
+
+def looks_like_qualitative(s: str) -> bool:
+    return " ".join(s.lower().split()) in _QUALITATIVE_VALUES
+
+
+def looks_like_value(s: str) -> bool:
+    return split_value_flag(s) is not None or looks_like_qualitative(s)
+
+
+#: A serial-number cell ("1", "12", "3.") in front of the test name.
+_SERIAL_RE = re.compile(r"^\d{1,3}\.?$")
+
+
+def _drop_serial_column(fields: list[Field]) -> list[Field]:
+    if (
+        len(fields) >= 3
+        and _SERIAL_RE.match(fields[0].text.strip())
+        and not looks_like_value(fields[1].text)
+        and looks_like_value(fields[2].text)
+    ):
+        return fields[1:]
+    return fields
+
+
 def is_test_row(fields: list[Field]) -> bool:
-    if len(fields) < 2 or len(fields) > 6:
+    fields = _drop_serial_column(fields)
+    if len(fields) < 2 or len(fields) > 7:
         return False
     if looks_like_number(fields[0].text):
         return False
-    if not looks_like_number(fields[1].text):
+    if not looks_like_value(fields[1].text):
         return False
     return True
 
@@ -286,9 +348,14 @@ def parse_kv(fields: list[Field]) -> tuple[str, str] | None:
 def parse_test_row(fields: list[Field]) -> dict | None:
     if not is_test_row(fields):
         return None
+    fields = _drop_serial_column(fields)
 
     name = fields[0].text
-    value = fields[1].text
+    value = fields[1].text.strip()
+    flag = None
+    split = split_value_flag(value)
+    if split is not None:
+        value, flag = split
     unit = None
     reference = None
 
@@ -296,14 +363,17 @@ def parse_test_row(fields: list[Field]) -> dict | None:
         text = f.text.strip()
         if not text:
             continue
-        if reference is None and looks_like_reference(text):
+        # Checked before units: a lone "H"/"L" also passes the unit pattern.
+        if flag is None and is_flag(text):
+            flag = text
+        elif reference is None and looks_like_reference(text):
             reference = text
         elif unit is None and looks_like_unit(text):
             unit = text
         elif reference is None:
             reference = text
 
-    return {"name": name, "value": value, "unit": unit, "reference": reference}
+    return {"name": name, "value": value, "unit": unit, "reference": reference, "flag": flag}
 
 
 # ------------------------------------------------------------------
@@ -378,6 +448,9 @@ def structure_document(
     mode = "body"  # "body" | "notes" | "comments"
 
     for page_idx in sorted(by_page.keys()):
+        # A "Note:" block belongs to the page it is printed on; carrying the
+        # mode across the page break files every later test as a note.
+        mode = "body"
         for line in by_page[page_idx]:
             if is_noise(line):
                 continue
@@ -398,12 +471,13 @@ def structure_document(
                 mode = "body"
                 continue
 
-            if mode == "notes":
-                notes.append(text)
-                continue
-            if mode == "comments":
-                comments.append(text)
-                continue
+            if mode in ("notes", "comments"):
+                # A test row means the note ended and the table resumed.
+                if parse_test_row(split_fields(line, x_gap=x_gap)) is not None:
+                    mode = "body"
+                else:
+                    (notes if mode == "notes" else comments).append(text)
+                    continue
 
             if is_column_header(line):
                 continue

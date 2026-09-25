@@ -1,7 +1,7 @@
 const supabaseAdmin = require('../config/supabaseAdminClient');
 const { standardizeMetrics } = require('../services/standardization/standardizeLabReport.service');
 const { maybeFlagReportForTriage, getTriageQueue } = require('../services/triage.service');
-const { extractFromFile } = require('../services/ocr.service');
+const { processDocument } = require('../services/ocrService');
 const {
   LAB_REPORTS_BUCKET,
   uploadFile,
@@ -132,10 +132,12 @@ async function uploadReport(req, res, next) {
       contentType: req.file.mimetype,
     });
 
-    const extracted = await extractFromFile({
+    const extracted = await processDocument({
       buffer: req.file.buffer,
-      originalName: req.file.originalname,
+      filename: req.file.originalname,
+      contentType: req.file.mimetype,
       storagePath,
+      appointmentId,
     });
 
     const result = await persistReport({
@@ -145,7 +147,8 @@ async function uploadReport(req, res, next) {
       reportDate: extracted.reportDate,
       ocrStatus: extracted.ocrStatus,
       metrics: extracted.metrics,
-      rawPayload: extracted,
+      // The pipeline's full envelope; on failure, the error that caused it.
+      rawPayload: extracted.raw ?? { error: extracted.error ?? null },
     });
 
     res.status(201).json({

@@ -145,11 +145,13 @@ def sniff_magic(file_path: str | Path) -> DetectedType | None:
 
     if not head:
         return None
-    # Some scanners emit junk before the PDF header; the spec tolerates it.
-    if head.startswith(_PDF_MAGIC) or _PDF_MAGIC in head:
-        return "pdf"
+    # Image signatures sit at offset 0 and are unambiguous, so they are checked
+    # first: a JPEG whose EXIF happens to contain "%PDF" is still a JPEG.
     if head.startswith(_PNG_MAGIC) or head.startswith(_JPEG_MAGIC):
         return "image"
+    # Some scanners emit junk before the PDF header; the spec tolerates it.
+    if _PDF_MAGIC in head:
+        return "pdf"
     return None
 
 
@@ -336,9 +338,16 @@ def _pages_from_tokens(tokens: Sequence, confidence: float | None) -> list[dict]
 # --------------------------------------------------------------------------
 # Report-level derivations
 # --------------------------------------------------------------------------
+#: Day-first before month-first: the reports this serves are printed in India,
+#: where 05/10/2025 is 5 October. A month-first date is only reached when the
+#: day-first reading is impossible (10/25/2025).
 _DATE_PATTERNS: tuple[str, ...] = (
-    "%d/%m/%Y", "%d-%m-%Y", "%Y-%m-%d", "%d.%m.%Y",
-    "%d %b %Y", "%d %B %Y", "%b %d, %Y", "%B %d, %Y",
+    "%d/%m/%Y", "%d-%m-%Y", "%Y-%m-%d", "%d.%m.%Y", "%Y/%m/%d",
+    "%d/%m/%y", "%d-%m-%y", "%d.%m.%y",
+    "%d %b %Y", "%d %B %Y", "%d-%b-%Y", "%d-%B-%Y", "%d/%b/%Y", "%d/%B/%Y",
+    "%d %b %y", "%d-%b-%y", "%d/%b/%y",
+    "%b %d, %Y", "%B %d, %Y",
+    "%m/%d/%Y", "%m-%d-%Y",
 )
 
 #: report_meta keys that may carry the date printed on the report, best first.
@@ -391,6 +400,7 @@ def _metrics_from_structured(structured: dict, confidence: float | None) -> list
                     "value": str(value).strip(),
                     "unit": test.get("unit"),
                     "reference": test.get("reference"),
+                    "flag": test.get("flag"),
                     "section": title,
                     "confidence": confidence,
                 }
@@ -446,7 +456,35 @@ def _envelope(file_path: str | Path, detected_type: DetectedType = "unsupported"
 
 
 def _finalize(envelope: dict, started_at: float) -> dict:
+    # Text with no recognizable test rows is not a successful lab-report read:
+    # it is a photo of something else, or a layout the parser does not know.
+    # `partial` routes it to a clinician instead of silently showing nothing.
+    if envelope["status"] == "success" and not envelope["metrics"]:
+        envelope["status"] = "partial"
+        envelope["warnings"].append("no test results were recognized in the document")
     envelope["processing_time_seconds"] = round(time.time() - started_at, 3)
+    return envelope
+
+
+def _retry_digital_with_ocr(envelope: dict, target: str, min_confidence: float) -> dict:
+    """OCR a digital PDF that yielded no metrics; keep the better envelope."""
+    reason = "digital engine found no test results"
+    envelope["routing"]["attempts"].append({"engine": "ocr", "reason": reason})
+    try:
+        payload = _run_ocr(target, min_confidence)
+    except Exception as exc:
+        logger.warning("OCR retry of digital PDF %s failed: %s", target, exc)
+        envelope["warnings"].append(f"OCR retry failed: {exc}")
+        return envelope
+
+    ocr_envelope = _fill_from_ocr(
+        {**envelope, "warnings": list(envelope["warnings"]),
+         "diagnostics": dict(envelope["diagnostics"]),
+         "routing": {**envelope["routing"], "fallback": True, "fallback_reason": reason}},
+        payload,
+    )
+    if len(ocr_envelope["metrics"]) > len(envelope["metrics"]):
+        return ocr_envelope
     return envelope
 
 
@@ -680,7 +718,14 @@ def process_document(
 
     if fallback_reason is None:
         _fill_from_digital(envelope, digital_result, separate_pages)
-        return _finalize(envelope, started_at)
+        if envelope["metrics"]:
+            return _finalize(envelope, started_at)
+        # Text but no test rows: typically a digital letterhead stamped over a
+        # scanned body, which is_digital() cannot tell from a real digital
+        # report. OCR the page images and keep whichever reading found more.
+        return _finalize(
+            _retry_digital_with_ocr(envelope, target, min_confidence), started_at
+        )
 
     # ---- Fallback: rasterise through OCR -------------------------------
     envelope["routing"]["fallback"] = True
@@ -762,7 +807,15 @@ def _main(argv: Sequence[str] | None = None) -> int:
         stream=sys.stderr,
     )
 
-    result = process_document(args.file, min_confidence=args.min_confidence)
+    # stdout carries exactly one JSON document, which the Node side parses.
+    # Paddle's C++ runtime logs straight to file descriptor 1, below anything
+    # Python's sys.stdout can intercept, so the descriptor itself is pointed at
+    # stderr while the engines run and restored only to write the result.
+    json_out = _reserve_stdout()
+    try:
+        result = process_document(args.file, min_confidence=args.min_confidence)
+    finally:
+        json_out = _restore_stdout(json_out)
 
     if args.storage_path:
         out: dict = to_ingest_payload(result, args.storage_path, args.appointment_id)
@@ -774,9 +827,40 @@ def _main(argv: Sequence[str] | None = None) -> int:
                 {k: v for k, v in page.items() if k != "text"} for page in out.get("pages", [])
             ]
 
-    json.dump(out, sys.stdout, indent=args.indent, ensure_ascii=False, default=str)
-    sys.stdout.write("\n")
+    # ensure_ascii keeps the output independent of the console code page
+    # (cp1252 on Windows cannot encode "µ" or "≤"); JSON.parse decodes it.
+    json_out.write(json.dumps(out, indent=args.indent, ensure_ascii=True, default=str))
+    json_out.write("\n")
+    json_out.flush()
     return 0 if result["status"] != "failed" else 1
+
+
+def _reserve_stdout():
+    """Send fd 1 to stderr; return a handle on the original stdout.
+
+    Returns None when stdout has no usable descriptor (some embedded or test
+    runners), in which case nothing is redirected.
+    """
+    try:
+        sys.stdout.flush()
+        saved_fd = os.dup(1)
+        os.dup2(2, 1)
+    except (OSError, ValueError, AttributeError):
+        return None
+    return saved_fd
+
+
+def _restore_stdout(saved_fd):
+    """Undo `_reserve_stdout` and return a text stream for the JSON result."""
+    if saved_fd is None:
+        return sys.stdout
+    try:
+        sys.stdout.flush()
+    except (OSError, ValueError):
+        pass
+    os.dup2(saved_fd, 1)
+    os.close(saved_fd)
+    return sys.stdout
 
 
 if __name__ == "__main__":

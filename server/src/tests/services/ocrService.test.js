@@ -1,11 +1,16 @@
-﻿const axios = require('axios');
-const { extractFromFile, checkOcrHealth } = require('../../services/ocrService');
+// The module reads OCR_SERVICE_URL at require-time, so it is seeded first.
+// A trailing slash checks that the base URL is normalized.
+const BASE_URL = 'http://ocr.test:8000';
+process.env.OCR_SERVICE_URL = `${BASE_URL}/`;
+
+const axios = require('axios');
+const env = require('../../config/env');
+const { extractFromFile, processDocument, checkOcrHealth } = require('../../services/ocrService');
 
 jest.mock('axios');
 
-// The module reads OCR_SERVICE_URL at require-time, so we seed it before requiring.
-const BASE_URL = 'http://localhost:8000';
-process.env.OCR_SERVICE_URL = BASE_URL;
+/** The multipart body axios was given, as text, for asserting on its parts. */
+const sentBody = (callIndex = 0) => axios.post.mock.calls[callIndex][1].getBuffer().toString();
 
 const makeBuffer = (content = 'data') => Buffer.from(content);
 
@@ -67,26 +72,33 @@ describe('ocrService', () => {
         expect(axios.post).toHaveBeenCalledTimes(1);
         const [url, , config] = axios.post.mock.calls[0];
         expect(url).toBe(`${BASE_URL}/ocr/predict-by-file`);
-        expect(config.timeout).toBe(120000);
+        expect(config.timeout).toBe(env.ocr.timeoutMs);
         expect(result).toEqual(mockData);
       });
 
-      it('uses upload.bin as filename fallback when filename is undefined', async () => {
+      it('names a file with no filename after its MIME type', async () => {
         axios.post.mockResolvedValue({ data: {} });
 
         await extractFromFile({ buffer: makeBuffer(), filename: undefined, contentType: 'image/jpeg' });
 
-        const [, formData] = axios.post.mock.calls[0];
-        // FormData internally stores the filename in its _streams / _fields;
-        // we verify indirectly that the call was made without throwing.
-        expect(axios.post).toHaveBeenCalledTimes(1);
+        // The OCR service rejects unknown extensions, so "upload.bin" would fail.
+        expect(sentBody()).toContain('filename="upload.jpg"');
       });
 
-      it('uses upload.bin as filename fallback when filename is empty string', async () => {
+      it('treats an empty filename the same way', async () => {
         axios.post.mockResolvedValue({ data: {} });
-        await expect(
-          extractFromFile({ buffer: makeBuffer(), filename: '', contentType: 'image/jpeg' })
-        ).resolves.toBeDefined();
+
+        await extractFromFile({ buffer: makeBuffer(), filename: '', contentType: 'image/png' });
+
+        expect(sentBody()).toContain('filename="upload.png"');
+      });
+
+      it('keeps the original filename when there is one', async () => {
+        axios.post.mockResolvedValue({ data: {} });
+
+        await extractFromFile({ ...validOpts, filename: 'IMG_1234.JPG' });
+
+        expect(sentBody()).toContain('filename="IMG_1234.JPG"');
       });
     });
 
@@ -149,8 +161,23 @@ describe('ocrService', () => {
 
     // --- Network-level errors (no error.response) ---
 
+    describe('timeouts → 504 "timed out"', () => {
+      ['ECONNABORTED', 'ETIMEDOUT'].forEach((code) => {
+        it(`maps ${code} to 504, not "unavailable"`, async () => {
+          const timeoutError = new Error(`timeout: ${code}`);
+          timeoutError.code = code;
+          axios.post.mockRejectedValue(timeoutError);
+
+          const err = await extractFromFile(validOpts).catch((e) => e);
+          expect(err.status).toBe(504);
+          expect(err.message).toMatch(/timed out/i);
+          expect(err.cause).toBe(timeoutError);
+        });
+      });
+    });
+
     describe('network / DNS errors → 503 "unavailable"', () => {
-      const unavailableCodes = ['ECONNREFUSED', 'ECONNABORTED', 'ETIMEDOUT', 'ENOTFOUND', 'EAI_AGAIN'];
+      const unavailableCodes = ['ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN'];
 
       unavailableCodes.forEach((code) => {
         it(`maps ${code} to 503 with "unavailable" message`, async () => {
@@ -184,10 +211,109 @@ describe('ocrService', () => {
   // checkOcrHealth
   // ---------------------------------------------------------------------------
 
+  // ---------------------------------------------------------------------------
+  // processDocument
+  // ---------------------------------------------------------------------------
+
+  describe('processDocument', () => {
+    const upload = {
+      buffer: makeBuffer('%PDF-1.4'),
+      filename: 'report.pdf',
+      contentType: 'application/pdf',
+      storagePath: 'lab-reports/p1/abc.pdf',
+      appointmentId: '11111111-1111-1111-1111-111111111111',
+    };
+
+    const serviceResponse = {
+      ingest: {
+        storagePath: upload.storagePath,
+        metrics: [{ key: 'Hemoglobin', value: '11.2', unit: 'g/dL', confidence: 1 }],
+        ocrStatus: 'success',
+        reportDate: '2025-10-12',
+      },
+      result: { status: 'success', engine: 'digital', text: 'Hemoglobin 11.2 g/dL' },
+    };
+
+    it('POSTs the file and its storage path to /document/process', async () => {
+      axios.post.mockResolvedValue({ data: serviceResponse });
+
+      await processDocument(upload);
+
+      const [url, , config] = axios.post.mock.calls[0];
+      expect(url).toBe(`${BASE_URL}/document/process`);
+      expect(config.timeout).toBe(env.ocr.timeoutMs);
+      const body = sentBody();
+      expect(body).toContain('filename="report.pdf"');
+      expect(body).toMatch(/name="storage_path"\r\n\r\nlab-reports\/p1\/abc\.pdf/);
+      expect(body).toMatch(/name="appointment_id"\r\n\r\n11111111-/);
+    });
+
+    it('omits appointment_id when there is none', async () => {
+      axios.post.mockResolvedValue({ data: serviceResponse });
+
+      await processDocument({ ...upload, appointmentId: null });
+
+      expect(sentBody()).not.toContain('appointment_id');
+    });
+
+    it('returns the ingest payload plus the raw envelope', async () => {
+      axios.post.mockResolvedValue({ data: serviceResponse });
+
+      await expect(processDocument(upload)).resolves.toEqual({
+        storagePath: upload.storagePath,
+        reportDate: '2025-10-12',
+        ocrStatus: 'success',
+        metrics: serviceResponse.ingest.metrics,
+        raw: serviceResponse.result,
+      });
+    });
+
+    it('never throws: an unreachable service becomes a failed result', async () => {
+      const netError = new Error('connect ECONNREFUSED');
+      netError.code = 'ECONNREFUSED';
+      axios.post.mockRejectedValue(netError);
+
+      const result = await processDocument(upload);
+
+      expect(result).toMatchObject({
+        storagePath: upload.storagePath,
+        ocrStatus: 'failed',
+        metrics: [],
+        reportDate: null,
+      });
+      expect(result.error).toMatch(/unavailable/i);
+    });
+
+    it('treats a response without an ingest payload as failed', async () => {
+      axios.post.mockResolvedValue({ data: { code: 200, data: [] } });
+
+      const result = await processDocument(upload);
+
+      expect(result.ocrStatus).toBe('failed');
+      expect(result.error).toMatch(/no ingest payload/);
+    });
+
+    it('does not pass through an ocrStatus outside the database enum', async () => {
+      axios.post.mockResolvedValue({
+        data: { ...serviceResponse, ingest: { ...serviceResponse.ingest, ocrStatus: 'weird' } },
+      });
+
+      await expect(processDocument(upload)).resolves.toMatchObject({ ocrStatus: 'failed' });
+    });
+
+    it('fails an empty buffer without calling the service', async () => {
+      const result = await processDocument({ ...upload, buffer: Buffer.alloc(0) });
+
+      expect(result.ocrStatus).toBe('failed');
+      expect(axios.post).not.toHaveBeenCalled();
+    });
+  });
+
   describe('checkOcrHealth', () => {
     it('returns true when the health endpoint responds with 200', async () => {
       axios.get.mockResolvedValue({ status: 200 });
       await expect(checkOcrHealth()).resolves.toBe(true);
+      expect(axios.get.mock.calls[0][0]).toBe(`${BASE_URL}/health`);
     });
 
     it('returns false when the endpoint responds with a non-200 status', async () => {

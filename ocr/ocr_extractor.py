@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
 import time
 from typing import Any, Sequence
 
@@ -27,9 +28,25 @@ logger = logging.getLogger(__name__)
 #: Set OCR_DEVICE=cpu to force CPU even where a GPU exists (useful in CI).
 DEVICE_ENV_VAR = "OCR_DEVICE"
 
+#: Overridable with OCR_DET_MODEL / OCR_REC_MODEL. Needs PaddleOCR >= 3.7.
+DEFAULT_DET_MODEL = "PP-OCRv6_small_det"
+DEFAULT_REC_MODEL = "PP-OCRv6_small_rec"
+
 #: PaddleOCR instances are expensive to build - one model load each - and are
 #: safe to reuse across documents. Keyed by the settings that affect the model.
 _ocr_instances: dict[tuple[str, str, bool], Any] = {}
+
+#: A PaddleOCR predictor is not safe to call from two threads at once, and a
+#: long-lived server (the FastAPI worker) serves requests from a thread pool.
+#: One lock serializes model construction and inference in this process.
+_ocr_lock = threading.Lock()
+
+
+def _env_flag(name: str, default: bool) -> bool:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
 
 
 # --------------------------------------------------------------------------
@@ -67,25 +84,29 @@ def resolve_device(preferred: str | None = None) -> str:
 
 
 def verify_gpu_status() -> str:
-    """Report - and return - the device OCR will actually use."""
+    """Report - and return - the device OCR will actually use.
+
+    Logs rather than prints: when the pipeline runs as a CLI, stdout is
+    reserved for the JSON result the Node side parses.
+    """
     try:
         import paddle  # noqa: PLC0415
 
         compiled = paddle.device.is_compiled_with_cuda()
     except ImportError:
-        print("❌ paddlepaddle is not installed; OCR is unavailable.")
+        logger.error("paddlepaddle is not installed; OCR is unavailable.")
         return "unavailable"
     except Exception as exc:
-        print(f"Could not verify GPU: {exc}")
+        logger.warning("Could not verify GPU: %s", exc)
         return resolve_device()
 
     device = resolve_device()
     if device == "gpu":
-        print("✅ GPU Acceleration Active!")
+        logger.info("GPU acceleration active.")
     elif compiled:
-        print("⚠️ WARNING: PaddlePaddle-GPU installed, but no CUDA device is visible. Using CPU.")
+        logger.warning("PaddlePaddle-GPU installed, but no CUDA device is visible. Using CPU.")
     else:
-        print("⚠️ WARNING: PaddlePaddle built without CUDA. Using CPU.")
+        logger.info("PaddlePaddle built without CUDA. Using CPU.")
     return device
 
 
@@ -97,11 +118,23 @@ def get_ocr(device: str | None = None, lang: str = "en", textline_orientation: b
     key = (resolved, lang, textline_orientation)
     if key not in _ocr_instances:
         logger.info("Loading PaddleOCR (device=%s, lang=%s)", resolved, lang)
-        _ocr_instances[key] = PaddleOCR(
-            use_textline_orientation=textline_orientation,
-            lang=lang,
-            device=resolved,
-        )
+        kwargs: dict[str, Any] = {
+            "use_textline_orientation": textline_orientation,
+            "lang": lang,
+            "device": resolved,
+            # PaddleOCR 3.x turns both of these on by default. Whole-page
+            # orientation and UVDoc unwarping add two model loads and most of
+            # the per-page runtime, and unwarping bends flat scans enough to
+            # corrupt glyphs. Opt back in for curled phone photos.
+            "use_doc_orientation_classify": _env_flag("OCR_DOC_ORIENTATION", False),
+            "use_doc_unwarping": _env_flag("OCR_DOC_UNWARPING", False),
+        }
+        # The small models read a one-page CPU scan in ~10s where PaddleOCR's
+        # default medium models took ~80s, with the same rows recovered on
+        # our samples. On a GPU box, set these to the *_medium_* models.
+        kwargs["text_detection_model_name"] = os.environ.get("OCR_DET_MODEL") or DEFAULT_DET_MODEL
+        kwargs["text_recognition_model_name"] = os.environ.get("OCR_REC_MODEL") or DEFAULT_REC_MODEL
+        _ocr_instances[key] = PaddleOCR(**kwargs)
     return _ocr_instances[key]
 
 
@@ -120,21 +153,35 @@ def bbox_from_poly(poly) -> list[float] | None:
     return [min(xs), min(ys), max(xs), max(ys)]
 
 
+def _polys(fields) -> Sequence:
+    """The polygons that line up index-for-index with `rec_texts`.
+
+    In PaddleOCR 3.x `dt_polys` is every *detected* box, while `rec_texts`,
+    `rec_scores` and `rec_polys` are the boxes that survived recognition
+    filtering - so `dt_polys[i]` is not necessarily the box of `rec_texts[i]`.
+    `dt_polys` is only a fallback for older results that lack `rec_polys`.
+    """
+    polys = fields.get("rec_polys")
+    if polys is None or len(polys) == 0:
+        polys = fields.get("dt_polys", [])
+    return polys if polys is not None else []
+
+
 def _raw_fields(page_result) -> tuple[Sequence, Sequence, Sequence]:
     """Pull (texts, scores, polys) out of whichever result shape we were given."""
     if hasattr(page_result, "keys"):
-        return (
-            page_result.get("rec_texts", []),
-            page_result.get("rec_scores", []),
-            page_result.get("dt_polys", []),
-        )
-    if hasattr(page_result, "res") and isinstance(page_result.res, dict):
-        return (
-            page_result.res.get("rec_texts", []),
-            page_result.res.get("rec_scores", []),
-            page_result.res.get("dt_polys", []),
-        )
-    return [], [], []
+        fields = page_result
+    elif hasattr(page_result, "res") and isinstance(page_result.res, dict):
+        fields = page_result.res
+    else:
+        return [], [], []
+    texts = fields.get("rec_texts", [])
+    scores = fields.get("rec_scores", [])
+    return (
+        texts if texts is not None else [],
+        scores if scores is not None else [],
+        _polys(fields),
+    )
 
 
 def _reading_order(items: list[dict]) -> list[dict]:
@@ -267,15 +314,18 @@ def extract_and_format(
 
     started_at = time.time()
     resolved_device = resolve_device(device)
-    ocr = get_ocr(resolved_device, lang=lang)
+    with _ocr_lock:
+        ocr = get_ocr(resolved_device, lang=lang)
 
     logger.info("Starting OCR (%s) for: %s", resolved_device, file_path)
-    raw_results = list(ocr.predict(file_path))
-
-    pages = [
-        _page_payload(index + 1, page_items(page_result, min_confidence))
-        for index, page_result in enumerate(raw_results)
-    ]
+    # Pages are reduced to their text boxes as they stream out: each raw result
+    # carries the rendered page image, and holding every one of them at once
+    # is what exhausts memory on a long scanned PDF.
+    with _ocr_lock:
+        pages = [
+            _page_payload(index + 1, page_items(page_result, min_confidence))
+            for index, page_result in enumerate(ocr.predict(file_path))
+        ]
 
     all_confidences = [item["confidence"] for page in pages for item in page["items"]]
 

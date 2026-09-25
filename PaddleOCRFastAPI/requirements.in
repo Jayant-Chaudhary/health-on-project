@@ -1,0 +1,12 @@
+FastAPI
+paddlepaddle
+paddleocr
+paddlex[ocr]==3.7.1
+uvicorn
+python-multipart
+requests
+numpy
+opencv-python
+PyMuPDF
+pdfplumber
+packaging

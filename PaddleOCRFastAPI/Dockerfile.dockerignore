@@ -1,0 +1,23 @@
+# Used by BuildKit when building with -f PaddleOCRFastAPI/Dockerfile from the
+# repository root. Everything is excluded except what the image needs.
+*
+!PaddleOCRFastAPI/
+!ocr/*.py
+
+# Within those, still leave out:
+**/__pycache__
+**/*.py[cod]
+**/.venv
+**/venv
+PaddleOCRFastAPI/*.pdf
+PaddleOCRFastAPI/Products_*
+PaddleOCRFastAPI/screenshots
+PaddleOCRFastAPI/docs
+PaddleOCRFastAPI/.github
+PaddleOCRFastAPI/test_*.py
+PaddleOCRFastAPI/*.md
+
+# Environment variables (never bake secrets into an image)
+**/.env
+**/.env.*
+**/*.env

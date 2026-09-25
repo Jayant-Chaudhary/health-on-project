@@ -12,6 +12,7 @@ const labReportsRoutes = require('./routes/labReports.routes');
 const checklistRoutes = require('./routes/checklist.routes');
 const postVisitRoutes = require('./routes/postVisit.routes');
 const profileRoutes = require('./routes/profile.routes');
+const ocrRoutes = require('./routes/ocr.routes');
 
 const app = express();
 
@@ -32,6 +33,7 @@ app.use('/api/lab-reports', labReportsRoutes);
 app.use('/api/checklist', checklistRoutes);
 app.use('/api/post-visit', postVisitRoutes);
 app.use('/api/profile', profileRoutes);
+app.use('/api/ocr', ocrRoutes);
 
 app.use((req, res) => res.status(404).json({ error: 'Endpoint not found' }));
 app.use(errorHandler);
