@@ -9,7 +9,7 @@
 
 const BUILDER_METHODS = [
   'select', 'insert', 'upsert', 'update', 'delete',
-  'eq', 'neq', 'in', 'is', 'or', 'order', 'limit', 'match',
+  'eq', 'neq', 'in', 'is', 'not', 'or', 'order', 'limit', 'match',
 ];
 
 function ok(data) {

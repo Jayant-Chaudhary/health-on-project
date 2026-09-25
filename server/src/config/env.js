@@ -26,7 +26,7 @@ module.exports = {
     port: Number(process.env.SMTP_PORT || 587),
     user: process.env.SMTP_USER || '',
     pass: process.env.SMTP_PASS || '',
-    from: process.env.SMTP_FROM || 'no-reply@maternalhealth.org',
+    from: process.env.SMTP_FROM || 'no-reply@medbrief.app',
   },
   inviteTokenTtlHours: Number(process.env.INVITE_TOKEN_TTL_HOURS || 72),
   ocrMetricReviewThreshold: Number(process.env.OCR_CONFIDENCE_REVIEW_THRESHOLD || 0.75),

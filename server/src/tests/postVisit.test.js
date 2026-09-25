@@ -13,6 +13,8 @@ jest.mock('../config/supabaseAdminClient', () => ({
 jest.mock('../services/storage.service', () => ({
   ...jest.requireActual('../services/storage.service'),
   createSignedUrl: jest.fn(async (bucket, path) => `https://signed.example/${bucket}/${path}`),
+  uploadFile: jest.fn(),
+  removeFile: jest.fn(),
 }));
 
 describe('Post Visit API', () => {
@@ -137,6 +139,7 @@ describe('Post Visit API', () => {
         consultation_notes: ok(mockNotes),
         prescriptions: ok([{ id: 'rx-1', storage_path: 'p/rx-1.png' }]),
         post_visit_action_items: ok(mockActionItems),
+        consultation_checklist_items: ok([{ id: 'c-1', label: 'BP checked' }]),
       });
 
       const response = await send('get', '/api/post-visit/appt-1');
@@ -148,6 +151,7 @@ describe('Post Visit API', () => {
           { id: 'rx-1', storage_path: 'p/rx-1.png', signed_url: 'https://signed.example/prescriptions/p/rx-1.png' },
         ],
         actionItems: mockActionItems,
+        consultationChecklist: [{ id: 'c-1', label: 'BP checked' }],
       });
     });
 
@@ -200,6 +204,92 @@ describe('Post Visit API', () => {
       const response = await send('patch', '/api/post-visit/action-items/ai-1').send({ isCompleted: 'yes' });
 
       expect(response.status).toBe(400);
+    });
+  });
+
+  describe('consultation checklist', () => {
+    it('should tick an item for the visit', async () => {
+      signInAs(mockClinician);
+      const chains = mockTables(supabaseAdmin, {
+        profiles: profileRow('clinician'),
+        appointments: ok(ownAppointment),
+        consultation_checklist_items: ok({ id: 'c-1', label: 'BP checked' }),
+      });
+
+      const response = await send('post', '/api/post-visit/appt-1/consultation-items').send({ label: 'BP checked' });
+
+      expect(response.status).toBe(201);
+      expect(chains.consultation_checklist_items[0].upsert).toHaveBeenCalledWith(
+        { appointment_id: 'appt-1', clinician_id: mockClinician.id, label: 'BP checked' },
+        { onConflict: 'appointment_id,label' }
+      );
+    });
+
+    it("should not untick an item on another clinician's visit", async () => {
+      signInAs(mockClinician);
+      const chains = mockTables(supabaseAdmin, {
+        profiles: profileRow('clinician'),
+        consultation_checklist_items: ok({ id: 'c-1', appointment_id: 'appt-1' }),
+        appointments: ok(strangersAppointment),
+      });
+
+      const response = await send('delete', '/api/post-visit/consultation-items/c-1');
+
+      expect(response.status).toBe(403);
+      expect(chains.consultation_checklist_items[0].delete).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('DELETE /post-visit/action-items/:itemId', () => {
+    it('should let the clinician take an action back off the next steps', async () => {
+      signInAs(mockClinician);
+      const chains = mockTables(supabaseAdmin, {
+        profiles: profileRow('clinician'),
+        post_visit_action_items: [ok({ id: 'ai-1', appointment_id: 'appt-1' }), ok(null)],
+        appointments: ok(ownAppointment),
+      });
+
+      const response = await send('delete', '/api/post-visit/action-items/ai-1');
+
+      expect(response.status).toBe(204);
+      expect(chains.post_visit_action_items[1].delete).toHaveBeenCalled();
+    });
+
+    it('should not let a patient delete a next step', async () => {
+      signInAs(mockPatient);
+      mockTables(supabaseAdmin, { profiles: profileRow('patient') });
+
+      const response = await send('delete', '/api/post-visit/action-items/ai-1');
+
+      expect(response.status).toBe(403);
+    });
+  });
+
+  describe('POST /post-visit/:appointmentId/prescriptions/upload', () => {
+    it("should store the file under the patient and record it", async () => {
+      signInAs(mockClinician);
+      const storage = require('../services/storage.service');
+      storage.uploadFile.mockResolvedValue('patient-456/rx.png');
+      const chains = mockTables(supabaseAdmin, {
+        profiles: profileRow('clinician'),
+        appointments: ok(ownAppointment),
+        prescriptions: ok({ id: 'rx-1', storage_path: 'patient-456/rx.png' }),
+      });
+
+      const response = await send('post', '/api/post-visit/appt-1/prescriptions/upload')
+        .field('typedInstructions', 'Twice daily')
+        .attach('file', Buffer.from('fake image'), { filename: 'rx.png', contentType: 'image/png' });
+
+      expect(response.status).toBe(201);
+      expect(storage.uploadFile).toHaveBeenCalledWith(
+        expect.objectContaining({ bucket: 'prescriptions', ownerId: mockPatient.id, originalName: 'rx.png' })
+      );
+      expect(chains.prescriptions[0].insert).toHaveBeenCalledWith({
+        appointment_id: 'appt-1',
+        storage_path: 'patient-456/rx.png',
+        typed_instructions: 'Twice daily',
+      });
+      expect(response.body.signed_url).toBe('https://signed.example/prescriptions/patient-456/rx.png');
     });
   });
 });

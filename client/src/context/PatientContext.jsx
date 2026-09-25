@@ -7,7 +7,7 @@ const PatientContext = createContext(null);
 /**
  * The signed-in patient, their appointments and their latest vitals.
  *
- * A patient has many appointments over a pregnancy — often with more than one
+ * A patient has many appointments over time — often with more than one
  * clinician — so the provider exposes the whole list and tracks which one the
  * user is currently looking at, rather than silently picking the first.
  */

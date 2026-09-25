@@ -11,16 +11,22 @@ export const checkinService = {
   },
 
   /**
-   * `answers` maps a template id to `{ value: 'yes' | 'no', notes }`. The API
-   * stores one row per question: the yes/no, plus any detail given with a yes.
+   * `answers` maps a template id to `{ value: 'yes' | 'no', notes }` for a
+   * yes/no question, or `{ text }` for a written one. The API stores one row
+   * per question: the yes/no plus any detail given with a yes, or the text.
    */
   async saveAnswers(appointmentId, answers) {
     const responses = Object.entries(answers)
-      .filter(([, a]) => a?.value === 'yes' || a?.value === 'no')
       .map(([templateId, a]) => {
+        if (typeof a?.text === 'string') {
+          const text = a.text.trim();
+          return text ? { templateId, text } : null;
+        }
+        if (a?.value !== 'yes' && a?.value !== 'no') return null;
         const detail = a.value === 'yes' ? a.notes?.trim() : '';
         return { templateId, answer: a.value === 'yes', ...(detail ? { detail } : {}) };
-      });
+      })
+      .filter(Boolean);
 
     if (!appointmentId || responses.length === 0) return null;
 

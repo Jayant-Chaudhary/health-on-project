@@ -1,6 +1,11 @@
 const supabaseAdmin = require('../config/supabaseAdminClient');
 const { assertAppointmentAccess, assertRowAccessViaAppointment } = require('../services/access.service');
-const { PRESCRIPTIONS_BUCKET, createSignedUrl } = require('../services/storage.service');
+const {
+  PRESCRIPTIONS_BUCKET,
+  createSignedUrl,
+  uploadFile,
+  removeFile,
+} = require('../services/storage.service');
 
 async function saveNotes(req, res, next) {
   try {
@@ -58,6 +63,58 @@ async function addPrescription(req, res, next) {
   }
 }
 
+/**
+ * Stores an uploaded prescription file and records it against the visit.
+ * The file is removed again if the database write fails, so storage never
+ * holds a prescription nobody can find.
+ */
+async function uploadPrescription(req, res, next) {
+  let storagePath = null;
+
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+
+    const { appointmentId } = req.params;
+    const access = await assertAppointmentAccess(appointmentId, req.user);
+    if (!access.ok) return res.status(access.status).json({ error: access.error });
+
+    const ownerId = access.appointment.patient_id;
+    if (!ownerId) {
+      return res.status(409).json({ error: 'The patient has not accepted their invite yet' });
+    }
+
+    storagePath = await uploadFile({
+      bucket: PRESCRIPTIONS_BUCKET,
+      ownerId,
+      buffer: req.file.buffer,
+      originalName: req.file.originalname,
+      contentType: req.file.mimetype,
+    });
+
+    const typedInstructions = (req.body.typedInstructions || '').trim();
+
+    const { data, error } = await supabaseAdmin
+      .from('prescriptions')
+      .insert({
+        appointment_id: appointmentId,
+        storage_path: storagePath,
+        typed_instructions: typedInstructions || null,
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    res.status(201).json({
+      ...data,
+      signed_url: await createSignedUrl(PRESCRIPTIONS_BUCKET, storagePath),
+    });
+  } catch (err) {
+    if (storagePath) await removeFile(PRESCRIPTIONS_BUCKET, storagePath);
+    next(err);
+  }
+}
+
 async function addActionItem(req, res, next) {
   try {
     const { label } = req.validated;
@@ -95,7 +152,7 @@ async function getPostVisitSummary(req, res, next) {
     const access = await assertAppointmentAccess(appointmentId, req.user);
     if (!access.ok) return res.status(access.status).json({ error: access.error });
 
-    const [notesResult, prescriptionsResult, actionItemsResult] = await Promise.all([
+    const [notesResult, prescriptionsResult, actionItemsResult, consultationResult] = await Promise.all([
       supabaseAdmin.from('consultation_notes').select('*').eq('appointment_id', appointmentId).maybeSingle(),
       supabaseAdmin.from('prescriptions').select('*').eq('appointment_id', appointmentId),
       supabaseAdmin
@@ -103,9 +160,14 @@ async function getPostVisitSummary(req, res, next) {
         .select('*')
         .eq('appointment_id', appointmentId)
         .order('created_at', { ascending: true }),
+      supabaseAdmin
+        .from('consultation_checklist_items')
+        .select('*')
+        .eq('appointment_id', appointmentId)
+        .order('created_at', { ascending: true }),
     ]);
 
-    for (const result of [notesResult, prescriptionsResult, actionItemsResult]) {
+    for (const result of [notesResult, prescriptionsResult, actionItemsResult, consultationResult]) {
       if (result.error) throw result.error;
     }
 
@@ -117,7 +179,12 @@ async function getPostVisitSummary(req, res, next) {
       }))
     );
 
-    res.json({ notes: notesResult.data, prescriptions, actionItems: actionItemsResult.data || [] });
+    res.json({
+      notes: notesResult.data,
+      prescriptions,
+      actionItems: actionItemsResult.data || [],
+      consultationChecklist: consultationResult.data || [],
+    });
   } catch (err) {
     next(err);
   }
@@ -145,4 +212,76 @@ async function toggleActionItem(req, res, next) {
   }
 }
 
-module.exports = { saveNotes, addPrescription, addActionItem, getPostVisitSummary, toggleActionItem };
+/** Takes an action item back off the patient's next steps. */
+async function deleteActionItem(req, res, next) {
+  try {
+    const access = await assertRowAccessViaAppointment('post_visit_action_items', req.params.itemId, req.user);
+    if (!access.ok) return res.status(access.status).json({ error: access.error });
+
+    const { error } = await supabaseAdmin.from('post_visit_action_items').delete().eq('id', req.params.itemId);
+    if (error) throw error;
+
+    res.status(204).send();
+  } catch (err) {
+    next(err);
+  }
+}
+
+/** Ticks a consultation checklist item for this visit. Ticking twice is a no-op. */
+async function addConsultationItem(req, res, next) {
+  try {
+    const { label } = req.validated;
+    const { appointmentId } = req.params;
+
+    const access = await assertAppointmentAccess(appointmentId, req.user);
+    if (!access.ok) return res.status(access.status).json({ error: access.error });
+
+    const { data, error } = await supabaseAdmin
+      .from('consultation_checklist_items')
+      .upsert(
+        { appointment_id: appointmentId, clinician_id: req.user.id, label },
+        { onConflict: 'appointment_id,label' }
+      )
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    res.status(201).json(data);
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function deleteConsultationItem(req, res, next) {
+  try {
+    const access = await assertRowAccessViaAppointment(
+      'consultation_checklist_items',
+      req.params.itemId,
+      req.user
+    );
+    if (!access.ok) return res.status(access.status).json({ error: access.error });
+
+    const { error } = await supabaseAdmin
+      .from('consultation_checklist_items')
+      .delete()
+      .eq('id', req.params.itemId);
+    if (error) throw error;
+
+    res.status(204).send();
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = {
+  saveNotes,
+  addPrescription,
+  uploadPrescription,
+  addActionItem,
+  getPostVisitSummary,
+  toggleActionItem,
+  deleteActionItem,
+  addConsultationItem,
+  deleteConsultationItem,
+};

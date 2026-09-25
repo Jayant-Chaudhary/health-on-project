@@ -19,6 +19,9 @@ async function createAppointment(req, res, next) {
     const { patientEmail, patientFullName, scheduledAt, questionnaireTemplateIds = [], newQuestions = [] } = req.validated;
     const clinicianId = req.user.id;
 
+    // Checked before anything is written, so a bad selection leaves no
+    // half-created appointment behind.
+    const templateIds = await ownTemplateIds(clinicianId, [...new Set(questionnaireTemplateIds)]);
     const existingPatientId = await findPatientIdByEmail(patientEmail);
     // A returning patient is linked straight away, so there is nothing left
     // for them to accept; a new one stays `invited` until they set a password.
@@ -40,7 +43,7 @@ async function createAppointment(req, res, next) {
     await attachQuestionnaire({
       appointmentId: appointment.id,
       clinicianId,
-      templateIds: questionnaireTemplateIds,
+      templateIds,
       newQuestions,
     });
 
@@ -68,7 +71,7 @@ async function createAppointment(req, res, next) {
  * this appointment without cluttering the clinician's reusable list.
  */
 async function attachQuestionnaire({ appointmentId, clinicianId, templateIds, newQuestions }) {
-  const ids = [...new Set(templateIds)];
+  const ids = [...templateIds];
 
   if (newQuestions.length > 0) {
     const { data: created, error } = await supabaseAdmin
@@ -76,6 +79,7 @@ async function attachQuestionnaire({ appointmentId, clinicianId, templateIds, ne
       .insert(
         newQuestions.map((q) => ({
           question_text: q.text,
+          response_type: q.responseType,
           clinician_id: clinicianId,
           is_active: q.saveToList,
         }))
@@ -93,6 +97,28 @@ async function attachQuestionnaire({ appointmentId, clinicianId, templateIds, ne
     .insert(ids.map((templateId) => ({ appointment_id: appointmentId, template_id: templateId })));
 
   if (error) throw error;
+}
+
+/** The subset of `ids` that are questions from this clinician's own library. */
+async function ownTemplateIds(clinicianId, ids) {
+  if (ids.length === 0) return [];
+
+  const { data, error } = await supabaseAdmin
+    .from('questionnaire_templates')
+    .select('id')
+    .eq('clinician_id', clinicianId)
+    .in('id', ids);
+
+  if (error) throw error;
+
+  const owned = new Set((data || []).map((t) => t.id));
+  const foreign = ids.filter((id) => !owned.has(id));
+  if (foreign.length > 0) {
+    const err = new Error('Some selected questions are not in your library');
+    err.status = 400;
+    throw err;
+  }
+  return ids;
 }
 
 /** The profile id behind an email address, or null if nobody has signed up yet. */
@@ -133,23 +159,28 @@ async function listAppointments(req, res, next) {
   }
 }
 
+/**
+ * Adds the invited email to every appointment, and for one whose patient has
+ * not accepted yet (no profile row) falls back to the name the clinician
+ * typed on the invite.
+ */
 async function attachInviteNames(appointments) {
-  const unlinked = appointments.filter((a) => !a.patient);
-  if (unlinked.length === 0) return appointments;
+  if (appointments.length === 0) return appointments;
 
   const { data: invites } = await supabaseAdmin
     .from('appointment_invites')
     .select('appointment_id, patient_full_name, patient_email')
-    .in('appointment_id', unlinked.map((a) => a.id));
+    .in('appointment_id', appointments.map((a) => a.id));
 
   const byAppointment = new Map((invites || []).map((i) => [i.appointment_id, i]));
 
   return appointments.map((appointment) => {
-    if (appointment.patient) return appointment;
     const invite = byAppointment.get(appointment.id);
+    const withEmail = { ...appointment, invited_email: invite?.patient_email ?? null };
+    if (appointment.patient) return withEmail;
+
     return {
-      ...appointment,
-      invited_email: invite?.patient_email ?? null,
+      ...withEmail,
       patient: invite?.patient_full_name
         ? { id: null, full_name: invite.patient_full_name, pending: true }
         : null,

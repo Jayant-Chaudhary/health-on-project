@@ -77,7 +77,7 @@ export default function ClinicianOnboarding() {
           value={formData.specialty}
           onChange={handleChange}
           required
-          placeholder="e.g. OB/GYN"
+          placeholder="e.g. General Medicine"
         />
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

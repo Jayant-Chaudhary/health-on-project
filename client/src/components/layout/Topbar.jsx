@@ -1,15 +1,19 @@
 import { useEffect, useRef, useState } from 'react';
 import { Icon } from '../common/Icon.jsx';
 import { Avatar } from '../common/Avatar.jsx';
-import { formatHeaderDate, formatGestationalAge } from '../../utils/format.js';
+import { formatHeaderDate } from '../../utils/format.js';
 import { statusOf } from '../../utils/clinical.js';
+import { useAuthContext } from '../../context/AuthContext.jsx';
 
 /**
  * Search · date · notifications · clinician identity.
  * The search field is a live patient switcher rather than decoration — typing
  * filters the queue and selecting swaps the dashboard's patient.
  */
-export function Topbar({ patients = [], onSelectPatient, notifications = [], clinicianName = 'Dr. Elena Rostova' }) {
+export function Topbar({ patients = [], onSelectPatient, notifications = [] }) {
+  const { profile } = useAuthContext();
+  const clinicianName = profile?.full_name || 'Clinician';
+  const clinicianRole = profile?.clinicianDetails?.specialty || 'Clinician';
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -17,7 +21,7 @@ export function Topbar({ patients = [], onSelectPatient, notifications = [], cli
 
   const results = query.trim()
     ? patients.filter((patient) =>
-        `${patient.name} ${patient.mrn}`.toLowerCase().includes(query.trim().toLowerCase())
+        `${patient.name} ${patient.email ?? ''}`.toLowerCase().includes(query.trim().toLowerCase())
       )
     : patients;
 
@@ -69,7 +73,7 @@ export function Topbar({ patients = [], onSelectPatient, notifications = [], cli
             setOpen(true);
           }}
           onFocus={() => setOpen(true)}
-          placeholder="Search patient by name or MRN"
+          placeholder="Search today's patients by name"
           aria-label="Search patients"
           className="field h-10 pl-10"
         />
@@ -90,8 +94,8 @@ export function Topbar({ patients = [], onSelectPatient, notifications = [], cli
                   <span className="min-w-0 flex-1">
                     <span className="block truncate font-display text-label-lg text-ink">{patient.name}</span>
                     <span className="block truncate text-body-sm text-ink-3">
-                      {patient.mrn}
-                      {patient.gestationalDays != null && ` · ${formatGestationalAge(patient.gestationalDays)}`}
+                      {patient.scheduledAt ? formatHeaderDate(patient.scheduledAt) : ''}
+                      {patient.isPending ? ' · invite pending' : ''}
                     </span>
                   </span>
                 </button>
@@ -141,7 +145,7 @@ export function Topbar({ patients = [], onSelectPatient, notifications = [], cli
         <Avatar name={clinicianName} size="sm" tone="cypress" />
         <div className="leading-tight">
           <p className="font-display text-label-md text-ink">{clinicianName}</p>
-          <p className="text-body-sm text-ink-3">On active duty</p>
+          <p className="text-body-sm text-ink-3">{clinicianRole}</p>
         </div>
       </div>
     </header>

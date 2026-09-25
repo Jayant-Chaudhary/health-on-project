@@ -14,10 +14,7 @@ const EDITABLE = [
   'fullName',
   'phone',
   'dateOfBirth',
-  'dueDate',
   'bloodType',
-  'gravida',
-  'para',
   'address',
   'emergencyContactName',
   'emergencyContactPhone',
@@ -45,13 +42,10 @@ export default function ProfilePage() {
     setSaving(true);
 
     try {
-      // Send empty strings as null so clearing a field actually clears it,
-      // and send the counts as numbers rather than strings.
+      // Send empty strings as null so clearing a field actually clears it.
       const changes = EDITABLE.reduce((payload, key) => {
         const value = form[key];
-        if (value === '' || value == null) return { ...payload, [key]: null };
-        if (key === 'gravida' || key === 'para') return { ...payload, [key]: Number(value) };
-        return { ...payload, [key]: value };
+        return { ...payload, [key]: value === '' || value == null ? null : value };
       }, {});
 
       await profileService.updateProfile(changes);
@@ -109,29 +103,8 @@ export default function ProfilePage() {
           </Card>
 
           <Card className="p-6">
-            <h3 className="font-bold text-lg text-ink mb-4">Pregnancy</h3>
+            <h3 className="font-bold text-lg text-ink mb-4">Health</h3>
             <div className="space-y-4">
-              <TextField
-                label="Estimated due date"
-                value={form.dueDate}
-                onChange={set('dueDate')}
-                type="date"
-              />
-              {profile?.gestationalDays != null && (
-                <p className="text-sm text-ink-soft -mt-2">
-                  That puts you at {Math.floor(profile.gestationalDays / 7)} weeks today.
-                </p>
-              )}
-              <div className="grid grid-cols-2 gap-4">
-                <TextField
-                  label="Gravida"
-                  value={form.gravida}
-                  onChange={set('gravida')}
-                  type="number"
-                  min="0"
-                />
-                <TextField label="Para" value={form.para} onChange={set('para')} type="number" min="0" />
-              </div>
               <TextField label="Blood type" value={form.bloodType} onChange={set('bloodType')} />
             </div>
           </Card>

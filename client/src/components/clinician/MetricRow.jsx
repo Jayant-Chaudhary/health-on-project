@@ -1,8 +1,7 @@
 import { Icon } from '../common/Icon.jsx';
-import { Chip } from '../common/Chip.jsx';
 import { TrendChart } from './TrendChart.jsx';
 import { useMetricTrend } from '../../hooks/useMetricTrend.js';
-import { statusOf, trendOf } from '../../utils/clinical.js';
+import { trendOf } from '../../utils/clinical.js';
 import { formatDate, relativeDays } from '../../utils/format.js';
 
 const TREND_ICON = { up: 'trendUp', down: 'trendDown', flat: 'minus' };
@@ -12,12 +11,10 @@ const TREND_ICON = { up: 'trendUp', down: 'trendDown', flat: 'minus' };
  * button — activating it expands the longitudinal history for that parameter
  * without navigating away from the patient.
  *
- * Reference range and recorded date ride along inside the value and status
- * cells rather than taking columns of their own; the column is ~590px wide and
- * a six-column table does not fit in it.
+ * Reports carry no reference ranges yet, so the row makes no normal/abnormal
+ * claim: it shows the reading, when it was taken, and whether OCR flagged it.
  */
 export function MetricRow({ metric, patientId, expanded, onToggle }) {
-  const tone = statusOf(metric.status);
   const { series, loading } = useMetricTrend({
     standardKey: metric.standardKey,
     patientId,
@@ -36,7 +33,9 @@ export function MetricRow({ metric, patientId, expanded, onToggle }) {
       >
         <td className="py-3 pl-5 pr-2 align-top">
           <div className="flex items-start gap-2.5">
-            <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${tone.dot}`} />
+            <span
+              className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${metric.needsReview ? 'bg-terracotta' : 'bg-sage'}`}
+            />
             <div className="min-w-0">
               <button
                 type="button"
@@ -65,16 +64,15 @@ export function MetricRow({ metric, patientId, expanded, onToggle }) {
               )}
             </span>
           )}
-          <span className="mt-0.5 block truncate text-body-sm tabular text-ink-3" title={metric.reference}>
-            Target {metric.reference}
-          </span>
         </td>
 
         <td className="px-2 py-3 align-top">
-          <Chip status={metric.status} />
-          <span className="mt-1 block text-body-sm text-ink-3" title={formatDate(metric.recordedAt)}>
-            {relativeDays(metric.recordedAt)}
+          <span className="block text-body-sm text-ink-2" title={formatDate(metric.recordedAt)}>
+            {relativeDays(metric.recordedAt) || '—'}
           </span>
+          {metric.needsReview && (
+            <span className="pill mt-1 border-terracotta-border bg-terracotta-surface text-terracotta">Needs review</span>
+          )}
         </td>
 
         <td className="py-3 pl-2 pr-5 align-top">
@@ -110,8 +108,7 @@ export function MetricRow({ metric, patientId, expanded, onToggle }) {
               <TrendChart
                 series={series}
                 unit={metric.unit}
-                status={metric.status}
-                reference={metric.reference}
+
               />
             </div>
           </td>

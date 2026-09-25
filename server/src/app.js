@@ -13,6 +13,8 @@ const checklistRoutes = require('./routes/checklist.routes');
 const postVisitRoutes = require('./routes/postVisit.routes');
 const profileRoutes = require('./routes/profile.routes');
 const ocrRoutes = require('./routes/ocr.routes');
+const patientsRoutes = require('./routes/patients.routes');
+const templatesRoutes = require('./routes/templates.routes');
 
 const app = express();
 
@@ -34,13 +36,15 @@ app.use('/api/checklist', checklistRoutes);
 app.use('/api/post-visit', postVisitRoutes);
 app.use('/api/profile', profileRoutes);
 app.use('/api/ocr', ocrRoutes);
+app.use('/api/patients', patientsRoutes);
+app.use('/api/templates', templatesRoutes);
 
 app.use((req, res) => res.status(404).json({ error: 'Endpoint not found' }));
 app.use(errorHandler);
 
 if (process.env.NODE_ENV !== 'test') {
   app.listen(env.port, () => {
-    console.log(`Maternal Health Platform Server listening on port ${env.port}`);
+    console.log(`MedBrief API listening on port ${env.port}`);
   });
 }
 

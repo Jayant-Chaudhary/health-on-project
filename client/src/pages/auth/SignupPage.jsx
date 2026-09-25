@@ -97,7 +97,7 @@ export default function SignupPage() {
   return (
     <div className="w-full">
       <h2 className="text-3xl font-bold text-slate-900 mb-2">Create an account</h2>
-      <p className="text-slate-600 mb-6">Join HealthOn to manage maternal care effectively</p>
+      <p className="text-slate-600 mb-6">Join MedBrief to prepare for and follow up on every visit</p>
 
       {/* Role Toggle */}
       <div className="flex p-1 bg-slate-100 rounded-lg mb-6 border border-slate-200">

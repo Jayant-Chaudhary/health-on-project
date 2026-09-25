@@ -6,7 +6,7 @@ import { MetricRow } from './MetricRow.jsx';
 const COLUMNS = [
   { label: 'Test / Parameter', className: 'pl-5 pr-2', width: 'w-[42%]' },
   { label: 'Latest value', className: 'px-2', width: 'w-[26%]' },
-  { label: 'Status', className: 'px-2', width: 'w-[20%]' },
+  { label: 'Recorded', className: 'px-2', width: 'w-[20%]' },
   { label: 'Trend', className: 'pl-2 pr-5 text-right', width: 'w-[12%]' },
 ];
 
