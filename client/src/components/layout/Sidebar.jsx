@@ -29,9 +29,7 @@ export function Sidebar({ collapsed, onToggle }) {
                   ${collapsed ? 'w-[72px]' : 'w-[248px]'}`}
     >
       <div className={`flex items-center gap-3 px-4 py-4 ${collapsed ? 'justify-center' : ''}`}>
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-cypress font-display text-label-lg text-surface">
-          M
-        </span>
+        <img src="/logo-mark.png" alt="MedBrief" className="h-10 w-10 shrink-0 object-contain" />
         {!collapsed && (
           <div className="min-w-0 flex-1">
             <p className="font-display text-label-lg text-ink">MedBrief</p>

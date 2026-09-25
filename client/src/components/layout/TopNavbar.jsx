@@ -35,9 +35,7 @@ export default function TopNavbar() {
           
           {/* Logo / Brand */}
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center text-white font-bold">
-              M
-            </div>
+            <img src="/logo-mark.png" alt="MedBrief" className="w-9 h-9 object-contain" />
             <span className="font-bold text-xl text-ink hidden sm:block">MedBrief</span>
           </div>
 

@@ -6,8 +6,9 @@ export default function AuthLayout() {
     <div className="flex flex-col lg:flex-row min-h-screen bg-canvas text-ink">
       {/* Mobile header (only header is green on mobile) */}
       <div className="lg:hidden flex items-center gap-3 px-6 py-4 bg-green-800 text-slate-100 shadow-sm">
-        <div className="w-8 h-8 bg-slate-100 rounded-lg flex items-center justify-center text-green-800 font-bold text-base shadow-sm">
-          M
+        {/* A light tile keeps the teal/blue mark readable on the green header. */}
+        <div className="w-9 h-9 bg-slate-100 rounded-lg flex items-center justify-center p-1 shadow-sm">
+          <img src="/logo-mark.png" alt="" className="h-full w-full object-contain" />
         </div>
         <span className="text-xl font-bold tracking-tight text-slate-100">MedBrief</span>
       </div>
@@ -15,11 +16,8 @@ export default function AuthLayout() {
       {/* Left side: branding/imagery (desktop web view) */}
       <div className="hidden lg:flex flex-col justify-between w-1/2 bg-green-800 p-12 text-slate-100 overflow-hidden relative">
         <div className="relative z-10">
-          <div className="flex items-center gap-3 mb-12">
-            <div className="w-10 h-10 bg-slate-100 rounded-lg flex items-center justify-center text-green-800 font-bold text-xl shadow-sm">
-              M
-            </div>
-            <span className="text-2xl font-bold tracking-tight text-slate-100">MedBrief</span>
+          <div className="mb-12 inline-flex rounded-2xl bg-slate-100 px-6 py-4 shadow-sm">
+            <img src="/logo.png" alt="MedBrief" className="h-24 w-auto object-contain" />
           </div>
           <h1 className="text-5xl font-bold leading-tight mb-6 text-slate-100">
             Modern way of consultancy,<br />unified.
