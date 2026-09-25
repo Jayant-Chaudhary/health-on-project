@@ -46,7 +46,7 @@ async function createAndSendInvite({ appointmentId, patientEmail, patientFullNam
       subject: 'Your appointment is confirmed — set up your account',
       html: `
         <p>Hi ${patientFullName || ''},</p>
-        <p>Your appointment has been scheduled. Click below to set your password and view your pre-visit checklist.</p>
+        <p>Your appointment has been scheduled on MedBrief. Click below to set your password and view your pre-visit checklist.</p>
         <p><a href="${inviteLink}">${inviteLink}</a></p>
         <p>This link expires in ${env.inviteTokenTtlHours} hours.</p>
       `,

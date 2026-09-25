@@ -30,10 +30,11 @@ describe('Questionnaire API', () => {
   });
 
   describe('GET /questionnaire/templates', () => {
-    it('should list active templates', async () => {
+    it("should list the clinician's own active questions", async () => {
+      signInAs(mockClinician);
       const mockTemplates = [{ id: 'q-1', question_text: 'How are you feeling?' }];
-      mockTables(supabaseAdmin, {
-        profiles: profileRow('patient'),
+      const chains = mockTables(supabaseAdmin, {
+        profiles: profileRow('clinician'),
         questionnaire_templates: ok(mockTemplates),
       });
 
@@ -41,6 +42,15 @@ describe('Questionnaire API', () => {
 
       expect(response.status).toBe(200);
       expect(response.body).toEqual(mockTemplates);
+      expect(chains.questionnaire_templates[0].eq).toHaveBeenCalledWith('clinician_id', mockClinician.id);
+    });
+
+    it('should return 403 for a patient', async () => {
+      mockTables(supabaseAdmin, { profiles: profileRow('patient') });
+
+      const response = await send('get', '/api/questionnaire/templates');
+
+      expect(response.status).toBe(403);
     });
   });
 
@@ -61,19 +71,17 @@ describe('Questionnaire API', () => {
       expect(response.body.map((t) => t.id)).toEqual(['q-1', 'q-2']);
     });
 
-    it('should fall back to the default questions when none were chosen', async () => {
-      const defaults = [{ id: 'default-1' }];
+    it('should return no questions when the clinician chose none', async () => {
       mockTables(supabaseAdmin, {
         profiles: profileRow('patient'),
         appointments: ok(ownAppointment),
         appointment_questionnaires: ok([]),
-        questionnaire_templates: ok(defaults),
       });
 
       const response = await send('get', `/api/questionnaire/appointment/${appointmentId}`);
 
       expect(response.status).toBe(200);
-      expect(response.body).toEqual(defaults);
+      expect(response.body).toEqual([]);
     });
   });
 
@@ -96,6 +104,47 @@ describe('Questionnaire API', () => {
       const response = await send('post', '/api/questionnaire/templates').send({ questionText: 'Any cramps?' });
 
       expect(response.status).toBe(403);
+    });
+  });
+
+  describe('PATCH/DELETE /questionnaire/templates/:id', () => {
+    it("should update the clinician's own question", async () => {
+      signInAs(mockClinician);
+      const chains = mockTables(supabaseAdmin, {
+        profiles: profileRow('clinician'),
+        questionnaire_templates: ok({ id: 'q-1', is_red_flag_trigger: true }),
+      });
+
+      const response = await send('patch', '/api/questionnaire/templates/q-1').send({ isRedFlagTrigger: true });
+
+      expect(response.status).toBe(200);
+      expect(chains.questionnaire_templates[0].update).toHaveBeenCalledWith({ is_red_flag_trigger: true });
+      expect(chains.questionnaire_templates[0].eq).toHaveBeenCalledWith('clinician_id', mockClinician.id);
+    });
+
+    it("should return 404 for a question outside the clinician's library", async () => {
+      signInAs(mockClinician);
+      mockTables(supabaseAdmin, {
+        profiles: profileRow('clinician'),
+        questionnaire_templates: ok(null),
+      });
+
+      const response = await send('delete', '/api/questionnaire/templates/someone-elses');
+
+      expect(response.status).toBe(404);
+    });
+
+    it('should soft-delete a question', async () => {
+      signInAs(mockClinician);
+      const chains = mockTables(supabaseAdmin, {
+        profiles: profileRow('clinician'),
+        questionnaire_templates: ok({ id: 'q-1' }),
+      });
+
+      const response = await send('delete', '/api/questionnaire/templates/q-1');
+
+      expect(response.status).toBe(204);
+      expect(chains.questionnaire_templates[0].update).toHaveBeenCalledWith({ is_active: false });
     });
   });
 

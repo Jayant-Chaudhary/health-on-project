@@ -13,8 +13,18 @@ const submitResponsesSchema = z.object({
     .min(1),
 });
 
+const questionText = z.string().trim().min(1).max(500);
+
 const createTemplateSchema = z.object({
-  questionText: z.string().trim().min(1).max(500),
+  questionText,
+  isRedFlagTrigger: z.boolean().optional(),
 });
 
-module.exports = { submitResponsesSchema, createTemplateSchema };
+const updateTemplateSchema = z
+  .object({
+    questionText: questionText.optional(),
+    isRedFlagTrigger: z.boolean().optional(),
+  })
+  .refine((body) => Object.keys(body).length > 0, { message: 'Nothing to update' });
+
+module.exports = { submitResponsesSchema, createTemplateSchema, updateTemplateSchema };

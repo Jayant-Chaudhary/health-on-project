@@ -12,10 +12,10 @@ export function ComingSoon({ title, icon = 'calendar' }) {
       <Sidebar collapsed={collapsed} onToggle={() => setCollapsed((value) => !value)} />
       <main className="flex flex-1 items-center justify-center p-8">
         <div className="card px-6 py-4">
-          <EmptyState icon={icon} title={`${title} is not part of this milestone`} description="The triage dashboard is the focus for now." />
+          <EmptyState icon={icon} title={`${title} is not part of this milestone`} description="The dashboard is the focus for now." />
           <p className="pb-4 text-center">
             <Link to="/clinician" className="text-label-md text-cypress hover:underline">
-              Back to triage queue
+              Back to dashboard
             </Link>
           </p>
         </div>

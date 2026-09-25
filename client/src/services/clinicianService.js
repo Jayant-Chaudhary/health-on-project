@@ -1,4 +1,4 @@
-import { request } from './apiClient.js';
+import { request, upload } from './apiClient.js';
 
 /** Create an appointment, attach its questionnaire and invite the patient. */
 export async function createAppointment({
@@ -14,8 +14,49 @@ export async function createAppointment({
   });
 }
 
+// ---------------------------------------------------------------------------
+// The clinician's own lists: pre-visit questions, consultation and action items
+// ---------------------------------------------------------------------------
+
 export async function getQuestionnaireTemplates() {
   return request('/api/questionnaire/templates');
+}
+
+export async function createQuestion({ questionText, isRedFlagTrigger = false }) {
+  return request('/api/questionnaire/templates', {
+    method: 'POST',
+    body: { questionText, isRedFlagTrigger },
+  });
+}
+
+export async function updateQuestion(id, changes) {
+  return request(`/api/questionnaire/templates/${id}`, { method: 'PATCH', body: changes });
+}
+
+export async function deleteQuestion(id) {
+  return request(`/api/questionnaire/templates/${id}`, { method: 'DELETE' });
+}
+
+/** `kind` is 'consultation' or 'action'. */
+export async function getTemplates(kind) {
+  return request(`/api/templates?kind=${kind}`);
+}
+
+export async function createTemplate(kind, label) {
+  return request('/api/templates', { method: 'POST', body: { kind, label } });
+}
+
+export async function updateTemplate(id, changes) {
+  return request(`/api/templates/${id}`, { method: 'PATCH', body: changes });
+}
+
+export async function deleteTemplate(id) {
+  return request(`/api/templates/${id}`, { method: 'DELETE' });
+}
+
+/** Everyone who has accepted a visit with this clinician. */
+export async function fetchMyPatients() {
+  return request('/api/patients');
 }
 
 /** Patients in the clinician's queue, for the sidebar and search. */
@@ -25,12 +66,11 @@ export async function fetchPatients() {
   return appointments.map((appointment) => ({
     id: appointment.patient_id,
     name: appointment.patient?.full_name ?? appointment.invited_email ?? 'Invited patient',
+    email: appointment.invited_email ?? null,
     // Nothing to open until the patient has accepted and been linked.
     isPending: !appointment.patient_id,
     scheduledAt: appointment.scheduled_at,
     status: appointment.status,
-    mrn: '',
-    gestationalDays: null,
     acuity: 'pending',
     appointmentId: appointment.id,
   }));
@@ -42,12 +82,14 @@ export async function fetchPatients() {
  * components consume.
  */
 export async function fetchPatientDashboard(patientId, appointmentId) {
-  const [appointment, responses, reports, postVisit] = await Promise.all([
+  const [appointment, responses, reports, postVisit, consultationTemplates, actionTemplates] = await Promise.all([
     request(`/api/appointments/${appointmentId}`),
     request(`/api/questionnaire/responses/${appointmentId}`),
     // Only what the patient chose to share with this appointment.
     request(`/api/lab-reports?appointmentId=${appointmentId}`),
     request(`/api/post-visit/${appointmentId}`),
+    getTemplates('consultation'),
+    getTemplates('action'),
   ]);
 
   return {
@@ -70,12 +112,17 @@ export async function fetchPatientDashboard(patientId, appointmentId) {
     metrics: buildMetrics(reports),
     triageAlerts: buildTriageAlerts(reports),
     notes: { text: postVisit?.notes?.notes_text ?? '', updatedAt: postVisit?.notes?.updated_at ?? null },
-    // The clinician's checklist is the patient's post-visit "next steps".
-    checklist: (postVisit?.actionItems ?? []).map((item) => ({
+    // What the clinician ticked during this consultation.
+    consultationItems: (postVisit?.consultationChecklist ?? []).map((item) => ({ id: item.id, label: item.label })),
+    consultationTemplates: consultationTemplates.map((t) => t.label),
+    // Actions assigned to the patient; they become the patient's next steps.
+    actionItems: (postVisit?.actionItems ?? []).map((item) => ({
       id: item.id,
       label: item.label,
-      isCompleted: item.is_completed,
+      doneByPatient: item.is_completed,
     })),
+    actionTemplates: actionTemplates.map((t) => t.label),
+    prescriptions: postVisit?.prescriptions ?? [],
     notifications: [],
   };
 }
@@ -94,12 +141,27 @@ export async function saveConsultancyNotes(appointmentId, notesText) {
   return request(`/api/post-visit/${appointmentId}/notes`, { method: 'PUT', body: { notesText } });
 }
 
-export async function toggleActionItem(itemId, isCompleted) {
-  return request(`/api/post-visit/action-items/${itemId}`, { method: 'PATCH', body: { isCompleted } });
-}
-
 export async function addActionItem(appointmentId, label) {
   return request(`/api/post-visit/${appointmentId}/action-items`, { method: 'POST', body: { label } });
+}
+
+export async function removeActionItem(itemId) {
+  return request(`/api/post-visit/action-items/${itemId}`, { method: 'DELETE' });
+}
+
+export async function addConsultationItem(appointmentId, label) {
+  return request(`/api/post-visit/${appointmentId}/consultation-items`, { method: 'POST', body: { label } });
+}
+
+export async function removeConsultationItem(itemId) {
+  return request(`/api/post-visit/consultation-items/${itemId}`, { method: 'DELETE' });
+}
+
+export async function uploadPrescription(appointmentId, file, typedInstructions = '') {
+  const form = new FormData();
+  form.append('file', file);
+  if (typedInstructions) form.append('typedInstructions', typedInstructions);
+  return upload(`/api/post-visit/${appointmentId}/prescriptions/upload`, form);
 }
 
 /** Doctor types in a value the OCR pipeline could not read confidently. */
@@ -117,34 +179,27 @@ export async function resolveTriageAlert(metricId, { standardKey, reviewedValue 
 // API → view-model helpers
 // ---------------------------------------------------------------------------
 
-const DAY_MS = 86_400_000;
-const GESTATION_DAYS = 280;
-
 function first(value) {
   return (Array.isArray(value) ? value[0] : value) ?? null;
 }
 
+/** Whole years since the date of birth, or null when none is on file. */
 function ageFrom(dateOfBirth) {
-  if (!dateOfBirth) return '—';
+  if (!dateOfBirth) return null;
   const dob = new Date(dateOfBirth);
+  if (Number.isNaN(dob.getTime())) return null;
   const now = new Date();
   let age = now.getFullYear() - dob.getFullYear();
   const beforeBirthday =
     now.getMonth() < dob.getMonth() || (now.getMonth() === dob.getMonth() && now.getDate() < dob.getDate());
   if (beforeBirthday) age -= 1;
-  return Number.isNaN(age) ? '—' : age;
+  return age;
 }
 
-/** Same derivation as the API's profile controller: counted back from the due date. */
-function gestationalDaysFrom(dueDate) {
-  if (!dueDate) return null;
-  const due = new Date(dueDate).getTime();
-  if (Number.isNaN(due)) return null;
-  const elapsed = GESTATION_DAYS - Math.round((due - Date.now()) / DAY_MS);
-  return elapsed >= 0 && elapsed <= GESTATION_DAYS + 28 ? elapsed : null;
-}
-
-/** The header card's patient, from the appointment's embedded profile. */
+/**
+ * The header card's patient. Only what is actually on file: a field the
+ * patient has not filled in is null, and the card leaves it out.
+ */
 function buildPatient(appointment, patientId) {
   const profile = appointment.patient;
   const details = first(profile?.patient_details);
@@ -152,15 +207,12 @@ function buildPatient(appointment, patientId) {
   return {
     id: profile?.id ?? patientId,
     name: profile?.full_name ?? appointment.invited_email ?? 'Invited patient',
-    acuity: 'pending',
-    acuityLabel: 'Pre-visit',
-    mrn: profile?.id ? `ID ${profile.id.slice(0, 8)}` : 'Pending registration',
+    email: appointment.invited_email ?? null,
+    phone: profile?.phone || null,
     age: ageFrom(details?.date_of_birth),
-    gravida: details?.gravida ?? '—',
-    para: details?.para ?? '—',
-    bloodType: details?.blood_type ?? '—',
-    gestationalDays: gestationalDaysFrom(details?.due_date),
-    dueDate: details?.due_date ?? null,
+    bloodType: details?.blood_type || null,
+    visitAt: appointment.scheduled_at,
+    visitStatus: appointment.status,
   };
 }
 
@@ -178,10 +230,11 @@ function buildMetrics(reports = []) {
         name: metric.metric_dictionary?.display_name ?? metric.raw_key,
         source: report.source_name ?? 'Lab report',
         unit: metric.unit_standard ?? metric.unit_raw ?? '',
-        reference: metric.reference_range ?? '—',
+        needsReview: false,
         history: [],
       };
 
+      if (metric.needs_review) entry.needsReview = true;
       // An unreadable value stays out of the series rather than charting as 0.
       if (value != null) {
         entry.history.push({ date: report.report_date ?? report.uploaded_at, value: Number(value) });
@@ -197,7 +250,6 @@ function buildMetrics(reports = []) {
       ...entry,
       value: latest?.value != null ? String(latest.value) : null,
       recordedAt: latest?.date ?? null,
-      status: entry.status ?? 'pending',
     };
   });
 }

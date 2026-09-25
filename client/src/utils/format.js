@@ -34,21 +34,6 @@ export function relativeDays(value) {
   return `${diff}d ago`;
 }
 
-/** Gestational age stored as total days → "28w 4d". */
-export function formatGestationalAge(totalDays) {
-  if (totalDays == null) return '—';
-  const weeks = Math.floor(totalDays / 7);
-  const days = totalDays % 7;
-  return `${weeks}w ${days}d`;
-}
-
-export function trimesterOf(totalDays) {
-  if (totalDays == null) return '';
-  if (totalDays < 98) return '1st Tri';
-  if (totalDays < 189) return '2nd Tri';
-  return '3rd Tri';
-}
-
 export function initialsOf(name = '') {
   return name
     .split(' ')

@@ -1,22 +1,27 @@
 import { NavLink } from 'react-router-dom';
 import { Icon } from '../common/Icon.jsx';
 import { Avatar } from '../common/Avatar.jsx';
+import { useAuthContext } from '../../context/AuthContext.jsx';
 
 const NAV_ITEMS = [
-  { to: '/clinician', label: 'Triage Queue', icon: 'triage', badge: 4, end: true },
+  { to: '/clinician', label: 'Dashboard', icon: 'triage', end: true },
   { to: '/clinician/appointments/new', label: 'New Visit', icon: 'plus' },
   { to: '/clinician/schedule', label: 'Schedule', icon: 'calendar' },
   { to: '/clinician/patients', label: 'Patients', icon: 'users' },
-  { to: '/clinician/lab-inbox', label: 'Lab Inbox', icon: 'flask', badge: 12 },
+  { to: '/clinician/checklists', label: 'Checklists', icon: 'check' },
+  { to: '/clinician/lab-inbox', label: 'Lab Inbox', icon: 'flask' },
   { to: '/clinician/analytics', label: 'Analytics', icon: 'chart' },
 ];
 
 /**
- * Expandable left rail. Collapsed it keeps icons and badges visible so the
- * clinician never loses sight of queue depth while reclaiming ~200px of width
- * for the data columns.
+ * Expandable left rail. Collapsed it keeps the icons so the clinician can
+ * still navigate while reclaiming ~200px of width for the data columns.
  */
-export function Sidebar({ collapsed, onToggle, clinicianName = 'Dr. E. Rostova', clinicianRole = 'Attending OB/GYN' }) {
+export function Sidebar({ collapsed, onToggle }) {
+  const { profile } = useAuthContext();
+  const clinicianName = profile?.full_name || 'Your profile';
+  const clinicianRole = profile?.clinicianDetails?.specialty || 'Clinician';
+
   return (
     <aside
       className={`flex shrink-0 flex-col border-r border-line bg-subcanvas transition-[width] duration-250
@@ -24,12 +29,14 @@ export function Sidebar({ collapsed, onToggle, clinicianName = 'Dr. E. Rostova',
     >
       <div className={`flex items-center gap-3 px-4 py-4 ${collapsed ? 'justify-center' : ''}`}>
         <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-cypress font-display text-label-lg text-surface">
-          A
+          M
         </span>
         {!collapsed && (
           <div className="min-w-0 flex-1">
-            <p className="font-display text-label-lg text-ink">Alma</p>
-            <p className="whitespace-nowrap text-[10px] font-bold uppercase tracking-[0.08em] text-ink-3">Maternal Triage</p>
+            <p className="font-display text-label-lg text-ink">MedBrief</p>
+            <p className="whitespace-nowrap text-[10px] font-bold uppercase tracking-[0.08em] text-ink-3">
+              Clinician Portal
+            </p>
           </div>
         )}
         {!collapsed && (
@@ -70,17 +77,6 @@ export function Sidebar({ collapsed, onToggle, clinicianName = 'Dr. E. Rostova',
           >
             <Icon name={item.icon} size={18} className="shrink-0" />
             {!collapsed && <span className="flex-1 truncate">{item.label}</span>}
-            {item.badge != null && (
-              <span
-                className={`rounded-full text-label-sm ${
-                  collapsed
-                    ? 'absolute right-1.5 top-1.5 bg-terracotta px-1.5 py-0.5 text-white'
-                    : 'bg-terracotta-surface px-2 py-0.5 text-terracotta'
-                }`}
-              >
-                {item.badge}
-              </span>
-            )}
           </NavLink>
         ))}
       </nav>

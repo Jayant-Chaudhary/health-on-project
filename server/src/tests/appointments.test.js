@@ -90,7 +90,8 @@ describe('Appointments API', () => {
       const chains = mockTables(supabaseAdmin, {
         profiles: profileRow('clinician'),
         appointments: ok({ id: 'appt-123', status: 'invited' }),
-        questionnaire_templates: ok([{ id: 'new-template' }]),
+        // The ownership check on the chosen ids, then the insert of new ones.
+        questionnaire_templates: [ok([{ id: templateId }]), ok([{ id: 'new-template' }])],
         appointment_questionnaires: ok(null),
       });
 
@@ -101,13 +102,31 @@ describe('Appointments API', () => {
       });
 
       expect(response.status).toBe(201);
-      expect(chains.questionnaire_templates[0].insert).toHaveBeenCalledWith([
+      expect(chains.questionnaire_templates[0].eq).toHaveBeenCalledWith('clinician_id', mockUser.id);
+      expect(chains.questionnaire_templates[1].insert).toHaveBeenCalledWith([
         { question_text: 'Any dizziness?', clinician_id: mockUser.id, is_active: false },
       ]);
       expect(chains.appointment_questionnaires[0].insert).toHaveBeenCalledWith([
         { appointment_id: 'appt-123', template_id: templateId },
         { appointment_id: 'appt-123', template_id: 'new-template' },
       ]);
+    });
+
+    it("should reject questions from another clinician's library before creating anything", async () => {
+      const chains = mockTables(supabaseAdmin, {
+        profiles: profileRow('clinician'),
+        questionnaire_templates: ok([]),
+        appointments: ok({ id: 'never' }),
+      });
+
+      const response = await send('post', '/api/appointments').send({
+        ...validPayload,
+        questionnaireTemplateIds: ['22222222-2222-4222-8222-222222222222'],
+      });
+
+      expect(response.status).toBe(400);
+      expect(chains.appointments).toBeUndefined();
+      expect(createAndSendInvite).not.toHaveBeenCalled();
     });
 
     it('should return 403 if user is not a clinician', async () => {
@@ -160,12 +179,13 @@ describe('Appointments API', () => {
       mockTables(supabaseAdmin, {
         profiles: profileRow('patient'),
         appointments: ok(mockAppointment),
+        appointment_invites: ok([{ appointment_id: 'appt-1', patient_email: 'p@example.com' }]),
       });
 
       const response = await send('get', '/api/appointments/appt-1');
 
       expect(response.status).toBe(200);
-      expect(response.body).toEqual(mockAppointment);
+      expect(response.body).toEqual({ ...mockAppointment, invited_email: 'p@example.com' });
     });
 
     it('should return 403 if user is not owner', async () => {

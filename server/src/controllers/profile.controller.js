@@ -1,22 +1,5 @@
 const supabaseAdmin = require('../config/supabaseAdminClient');
 
-/** Days a full-term pregnancy runs, used to derive gestational age. */
-const GESTATION_DAYS = 280;
-
-/**
- * Gestational age is derived from the due date rather than stored: a week
- * count written into the database is wrong the day after it is written.
- */
-function gestationalDaysFrom(dueDate) {
-  if (!dueDate) return null;
-  const due = new Date(dueDate);
-  if (Number.isNaN(due.getTime())) return null;
-
-  const daysRemaining = Math.round((due.getTime() - Date.now()) / 86_400_000);
-  const elapsed = GESTATION_DAYS - daysRemaining;
-  return elapsed >= 0 && elapsed <= GESTATION_DAYS + 28 ? elapsed : null;
-}
-
 function shapeProfile(profile, details, role) {
   const base = {
     id: profile.id,
@@ -39,11 +22,7 @@ function shapeProfile(profile, details, role) {
   return {
     ...base,
     dateOfBirth: details?.date_of_birth ?? null,
-    dueDate: details?.due_date ?? null,
-    gestationalDays: gestationalDaysFrom(details?.due_date),
     bloodType: details?.blood_type ?? null,
-    gravida: details?.gravida ?? null,
-    para: details?.para ?? null,
     address: details?.address ?? null,
     emergencyContactName: details?.emergency_contact_name ?? null,
     emergencyContactPhone: details?.emergency_contact_phone ?? null,
@@ -105,10 +84,7 @@ async function updateProfile(req, res, next) {
           }
         : {
             dateOfBirth: 'date_of_birth',
-            dueDate: 'due_date',
             bloodType: 'blood_type',
-            gravida: 'gravida',
-            para: 'para',
             address: 'address',
             emergencyContactName: 'emergency_contact_name',
             emergencyContactPhone: 'emergency_contact_phone',
@@ -130,4 +106,4 @@ async function updateProfile(req, res, next) {
   }
 }
 
-module.exports = { getProfile, updateProfile, gestationalDaysFrom, shapeProfile };
+module.exports = { getProfile, updateProfile, shapeProfile };

@@ -37,7 +37,7 @@ export default function TopNavbar() {
             <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center text-white font-bold">
               M
             </div>
-            <span className="font-bold text-xl text-ink hidden sm:block">Mamta Care</span>
+            <span className="font-bold text-xl text-ink hidden sm:block">MedBrief</span>
           </div>
 
           {/* Desktop Navigation */}

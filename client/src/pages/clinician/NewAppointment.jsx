@@ -1,13 +1,26 @@
-import { useState } from 'react';
-import { CalendarPlus, Copy, Check } from 'lucide-react';
-import { createAppointment } from '../../services/clinicianService';
+import { useEffect, useMemo, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { CalendarPlus, Copy, Check, Trash2, Search, X } from 'lucide-react';
+import {
+  createAppointment,
+  fetchMyPatients,
+  getQuestionnaireTemplates,
+} from '../../services/clinicianService';
 import { useToast } from '../../context/ToastContext';
 import { Sidebar } from '../../components/layout/Sidebar.jsx';
 import { SectionCard } from '../../components/common/SectionCard.jsx';
 import { Button } from '../../components/common/Button.jsx';
+import { formatDate } from '../../utils/format.js';
+
+const EMPTY_FORM = { patientFullName: '', patientEmail: '', scheduledAt: '' };
 
 /**
  * Schedule a visit and invite the patient to it.
+ *
+ * A returning patient is found by name among the clinician's own patients;
+ * anyone not found is entered by name and email. The pre-visit questions
+ * default to the clinician's whole library, and extra ones can be written
+ * for this patient alone.
  *
  * The invite link is shown after creating the appointment because SMTP is
  * best-effort: if the email does not go out, the clinic still needs a link it
@@ -15,28 +28,103 @@ import { Button } from '../../components/common/Button.jsx';
  */
 export default function NewAppointment() {
   const [collapsed, setCollapsed] = useState(false);
-  const [form, setForm] = useState({ patientFullName: '', patientEmail: '', scheduledAt: '' });
+  const [searchParams] = useSearchParams();
+  const { showToast } = useToast();
+
+  const [patients, setPatients] = useState([]);
+  const [mode, setMode] = useState('search'); // 'search' | 'manual'
+  const [query, setQuery] = useState('');
+  const [chosenPatient, setChosenPatient] = useState(null);
+  const [form, setForm] = useState(EMPTY_FORM);
+
+  const [library, setLibrary] = useState([]);
+  const [selectedQuestionIds, setSelectedQuestionIds] = useState(new Set());
+  const [newQuestions, setNewQuestions] = useState([]);
+  const [draftQuestion, setDraftQuestion] = useState('');
+  const [saveDraftToLibrary, setSaveDraftToLibrary] = useState(false);
+
   const [result, setResult] = useState(null);
   const [saving, setSaving] = useState(false);
   const [copied, setCopied] = useState(false);
-  const { showToast } = useToast();
+
+  useEffect(() => {
+    Promise.all([fetchMyPatients(), getQuestionnaireTemplates()])
+      .then(([patientRows, questionRows]) => {
+        setPatients(patientRows);
+        setLibrary(questionRows);
+        // Every saved question is asked by default; the doctor unticks exceptions.
+        setSelectedQuestionIds(new Set(questionRows.map((q) => q.id)));
+
+        // Arriving from the patient list pre-selects that patient.
+        const preselect = patientRows.find((p) => p.id === searchParams.get('patient'));
+        if (preselect) setChosenPatient(preselect);
+        // With no returning patients there is nothing to search.
+        if (patientRows.length === 0) setMode('manual');
+      })
+      .catch((err) => showToast(err.message || 'Could not load your patients and questions.', 'error'));
+  }, [searchParams, showToast]);
+
+  const matches = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    if (!needle) return patients.slice(0, 8);
+    return patients.filter((p) => (p.fullName || '').toLowerCase().includes(needle)).slice(0, 8);
+  }, [patients, query]);
 
   const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }));
 
+  function switchToManual() {
+    // Carry the typed name across so the doctor does not type it twice.
+    setForm((f) => ({ ...f, patientFullName: f.patientFullName || query.trim() }));
+    setChosenPatient(null);
+    setMode('manual');
+  }
+
+  function toggleQuestion(id) {
+    setSelectedQuestionIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function addDraftQuestion() {
+    const text = draftQuestion.trim();
+    if (!text) return;
+    setNewQuestions((current) => [...current, { key: `${Date.now()}`, text, saveToList: saveDraftToLibrary }]);
+    setDraftQuestion('');
+    setSaveDraftToLibrary(false);
+  }
+
+  const patientReady =
+    mode === 'search' ? Boolean(chosenPatient?.email) : Boolean(form.patientFullName.trim() && form.patientEmail.trim());
+
   async function handleSubmit(event) {
     event.preventDefault();
+    if (!patientReady || !form.scheduledAt) return;
+
     setSaving(true);
     setResult(null);
 
+    const patient =
+      mode === 'search'
+        ? { patientFullName: chosenPatient.fullName || chosenPatient.email, patientEmail: chosenPatient.email }
+        : { patientFullName: form.patientFullName.trim(), patientEmail: form.patientEmail.trim() };
+
     try {
       const created = await createAppointment({
-        patientFullName: form.patientFullName,
-        patientEmail: form.patientEmail,
+        ...patient,
         scheduledAt: new Date(form.scheduledAt).toISOString(),
+        questionnaireTemplateIds: [...selectedQuestionIds],
+        newQuestions: newQuestions.map(({ text, saveToList }) => ({ text, saveToList })),
       });
 
       setResult(created);
-      setForm({ patientFullName: '', patientEmail: '', scheduledAt: '' });
+      setForm(EMPTY_FORM);
+      setChosenPatient(null);
+      setQuery('');
+      setNewQuestions([]);
+      setSelectedQuestionIds(new Set(library.map((q) => q.id)));
       showToast(
         created.isReturningPatient
           ? 'Appointment added to the existing patient record.'
@@ -61,71 +149,12 @@ export default function NewAppointment() {
 
       <main className="flex-1 overflow-y-auto px-8 py-6">
         <div className="mx-auto max-w-2xl space-y-4">
-          <form onSubmit={handleSubmit}>
-            <SectionCard
-              icon="calendar"
-              title="New appointment"
-              subtitle="Schedules the visit and invites the patient to their portal"
-              bodyClassName="p-5"
-            >
-              <div className="space-y-4">
-                <div>
-                  <label htmlFor="patient-name" className="mb-1.5 block text-label-md text-ink-2">
-                    Patient name
-                  </label>
-                  <input
-                    id="patient-name"
-                    value={form.patientFullName}
-                    onChange={set('patientFullName')}
-                    className="field h-10"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label htmlFor="patient-email" className="mb-1.5 block text-label-md text-ink-2">
-                    Patient email
-                  </label>
-                  <input
-                    id="patient-email"
-                    type="email"
-                    value={form.patientEmail}
-                    onChange={set('patientEmail')}
-                    className="field h-10"
-                    required
-                  />
-                  <p className="mt-1 text-body-sm text-ink-3">
-                    If this patient already has an account, the visit is added to it — their existing
-                    password keeps working.
-                  </p>
-                </div>
-
-                <div>
-                  <label htmlFor="scheduled-at" className="mb-1.5 block text-label-md text-ink-2">
-                    Date and time
-                  </label>
-                  <input
-                    id="scheduled-at"
-                    type="datetime-local"
-                    value={form.scheduledAt}
-                    onChange={set('scheduledAt')}
-                    className="field h-10"
-                    required
-                  />
-                </div>
-
-                <Button type="submit" disabled={saving} className="w-full">
-                  <CalendarPlus size={16} />
-                  {saving ? 'Creating…' : 'Create and invite'}
-                </Button>
-              </div>
-            </SectionCard>
-          </form>
-
           {result?.inviteLink && (
-            <SectionCard icon="check" title="Invite link" bodyClassName="p-5">
+            <SectionCard icon="check" title="Visit created" bodyClassName="p-5">
               <p className="mb-3 text-body-md text-ink-2">
-                Emailed to the patient. Copy it here if you need to send it another way.
+                {result.isReturningPatient
+                  ? 'Added to the patient’s account — they will see it when they sign in.'
+                  : 'The invite was emailed. Copy the link here if you need to send it another way.'}
               </p>
               <div className="flex items-center gap-2">
                 <code className="flex-1 truncate rounded-xl border border-line bg-subcanvas px-3 py-2 text-body-sm text-ink">
@@ -136,8 +165,236 @@ export default function NewAppointment() {
                   {copied ? 'Copied' : 'Copy'}
                 </Button>
               </div>
+              <p className="mt-3 text-body-sm">
+                <Link to="/clinician/schedule" className="text-cypress hover:underline">
+                  View schedule
+                </Link>
+              </p>
             </SectionCard>
           )}
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <SectionCard icon="users" title="Patient" subtitle="Find a returning patient, or enter a new one" bodyClassName="p-5">
+              {mode === 'search' ? (
+                chosenPatient ? (
+                  <div className="flex items-center justify-between gap-3 rounded-xl border border-sage-border bg-sage-surface px-4 py-3">
+                    <div className="min-w-0">
+                      <p className="font-display text-label-lg text-ink">{chosenPatient.fullName || 'Unnamed patient'}</p>
+                      <p className="truncate text-body-sm text-ink-2">
+                        {chosenPatient.email ?? 'No email on file'}
+                        {chosenPatient.lastVisit && ` · last visit ${formatDate(chosenPatient.lastVisit.scheduledAt)}`}
+                      </p>
+                      {!chosenPatient.email && (
+                        <button type="button" onClick={switchToManual} className="text-label-md text-cypress hover:underline">
+                          Enter their email to invite them
+                        </button>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setChosenPatient(null)}
+                      aria-label="Choose a different patient"
+                      className="rounded-lg p-1.5 text-ink-3 hover:bg-line/60 hover:text-ink"
+                    >
+                      <X size={16} />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <label htmlFor="patient-search" className="block text-label-md text-ink-2">
+                      Search your patients by name
+                    </label>
+                    <div className="relative">
+                      <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-3" />
+                      <input
+                        id="patient-search"
+                        value={query}
+                        onChange={(e) => setQuery(e.target.value)}
+                        placeholder="Start typing a name…"
+                        className="field h-10 pl-9"
+                        autoComplete="off"
+                      />
+                    </div>
+
+                    {matches.length > 0 ? (
+                      <ul className="divide-y divide-line overflow-hidden rounded-xl border border-line">
+                        {matches.map((patient) => (
+                          <li key={patient.id}>
+                            <button
+                              type="button"
+                              onClick={() => setChosenPatient(patient)}
+                              className="flex w-full items-center justify-between gap-3 bg-raised px-4 py-2.5 text-left hover:bg-subcanvas"
+                            >
+                              <span className="min-w-0">
+                                <span className="block truncate text-body-md text-ink">
+                                  {patient.fullName || 'Unnamed patient'}
+                                </span>
+                                <span className="block truncate text-body-sm text-ink-3">{patient.email}</span>
+                              </span>
+                              {patient.lastVisit && (
+                                <span className="shrink-0 text-body-sm text-ink-3">
+                                  Last visit {formatDate(patient.lastVisit.scheduledAt)}
+                                </span>
+                              )}
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="text-body-sm text-ink-3">No patient of yours matches “{query}”.</p>
+                    )}
+
+                    <button type="button" onClick={switchToManual} className="text-label-md text-cypress hover:underline">
+                      Can’t find them? Enter their name and email instead
+                    </button>
+                  </div>
+                )
+              ) : (
+                <div className="space-y-4">
+                  <div>
+                    <label htmlFor="patient-name" className="mb-1.5 block text-label-md text-ink-2">
+                      Patient name
+                    </label>
+                    <input id="patient-name" value={form.patientFullName} onChange={set('patientFullName')} className="field h-10" required />
+                  </div>
+                  <div>
+                    <label htmlFor="patient-email" className="mb-1.5 block text-label-md text-ink-2">
+                      Patient email
+                    </label>
+                    <input
+                      id="patient-email"
+                      type="email"
+                      value={form.patientEmail}
+                      onChange={set('patientEmail')}
+                      className="field h-10"
+                      required
+                    />
+                    <p className="mt-1 text-body-sm text-ink-3">
+                      If this email already has an account, the visit is added to it — their password keeps working.
+                    </p>
+                  </div>
+                  {patients.length > 0 && (
+                    <button type="button" onClick={() => setMode('search')} className="text-label-md text-cypress hover:underline">
+                      Search my patients by name instead
+                    </button>
+                  )}
+                </div>
+              )}
+            </SectionCard>
+
+            <SectionCard icon="calendar" title="Date and time" bodyClassName="p-5">
+              <input
+                id="scheduled-at"
+                aria-label="Date and time"
+                type="datetime-local"
+                value={form.scheduledAt}
+                onChange={set('scheduledAt')}
+                className="field h-10"
+                required
+              />
+            </SectionCard>
+
+            <SectionCard
+              icon="notes"
+              title="Pre-visit questions"
+              subtitle="Asked before the visit; untick any that don't apply"
+              bodyClassName="p-5"
+              action={
+                library.length > 0 && (
+                  <span className="shrink-0 rounded-full bg-subcanvas px-3 py-1 text-label-sm uppercase text-ink-2">
+                    {selectedQuestionIds.size + newQuestions.length} selected
+                  </span>
+                )
+              }
+            >
+              {library.length === 0 ? (
+                <p className="mb-3 text-body-sm text-ink-3">
+                  Your question library is empty. Save the questions you ask everyone under{' '}
+                  <Link to="/clinician/checklists" className="text-cypress hover:underline">Checklists</Link>, or write
+                  one below.
+                </p>
+              ) : (
+                <ul className="mb-3 max-h-64 space-y-1 overflow-y-auto pr-1">
+                  {library.map((question) => (
+                    <li key={question.id}>
+                      <label className="flex cursor-pointer items-start gap-3 rounded-lg p-2 hover:bg-subcanvas">
+                        <input
+                          type="checkbox"
+                          checked={selectedQuestionIds.has(question.id)}
+                          onChange={() => toggleQuestion(question.id)}
+                          className="mt-1 h-4 w-4 accent-[#2C4035]"
+                        />
+                        <span className="text-body-md text-ink">
+                          {question.question_text}
+                          {question.is_red_flag_trigger && (
+                            <span className="ml-2 text-label-sm uppercase text-terracotta">red flag</span>
+                          )}
+                        </span>
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              {newQuestions.length > 0 && (
+                <ul className="mb-3 space-y-2">
+                  {newQuestions.map((question) => (
+                    <li key={question.key} className="flex items-start gap-3 rounded-xl border border-line bg-raised p-3">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-body-md text-ink">{question.text}</p>
+                        <p className="text-body-sm text-ink-3">
+                          {question.saveToList ? 'Also saved to your library' : 'Only for this patient'}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setNewQuestions((current) => current.filter((q) => q.key !== question.key))}
+                        aria-label="Remove question"
+                        className="text-ink-3 hover:text-terracotta"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              <div className="space-y-2 rounded-xl border border-line bg-subcanvas p-3">
+                <input
+                  value={draftQuestion}
+                  onChange={(e) => setDraftQuestion(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      addDraftQuestion();
+                    }
+                  }}
+                  placeholder="Write a question for this patient…"
+                  aria-label="New question"
+                  className="field h-10"
+                />
+                <div className="flex items-center justify-between">
+                  <label className="flex cursor-pointer items-center gap-2 text-body-sm text-ink-2">
+                    <input
+                      type="checkbox"
+                      checked={saveDraftToLibrary}
+                      onChange={(e) => setSaveDraftToLibrary(e.target.checked)}
+                      className="h-4 w-4 accent-[#2C4035]"
+                    />
+                    Also save to my library
+                  </label>
+                  <Button type="button" size="sm" variant="secondary" onClick={addDraftQuestion} disabled={!draftQuestion.trim()}>
+                    Add question
+                  </Button>
+                </div>
+              </div>
+            </SectionCard>
+
+            <Button type="submit" disabled={saving || !patientReady || !form.scheduledAt} className="w-full">
+              <CalendarPlus size={16} />
+              {saving ? 'Creating…' : 'Create visit and invite'}
+            </Button>
+          </form>
         </div>
       </main>
     </div>

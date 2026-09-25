@@ -15,13 +15,6 @@ function greeting() {
   return 'Good evening';
 }
 
-function gestationLabel(days) {
-  if (days == null) return null;
-  const weeks = Math.floor(days / 7);
-  const trimester = days < 98 ? 1 : days < 189 ? 2 : 3;
-  return `${weeks} weeks · Trimester ${trimester}`;
-}
-
 export default function HomePage() {
   const { profile, appointments, activeAppointment, selectAppointment, loading, error } =
     usePatientContext();
@@ -48,7 +41,6 @@ export default function HomePage() {
   }
 
   const firstName = profile?.fullName?.split(' ')[0] ?? 'there';
-  const gestation = gestationLabel(profile?.gestationalDays);
 
   return (
     <div className="py-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
@@ -57,15 +49,9 @@ export default function HomePage() {
           <h1 className="text-3xl font-bold text-ink mb-2">
             {greeting()}, {firstName}
           </h1>
-          {gestation ? (
-            <div className="inline-flex items-center px-3 py-1 bg-primary-light text-primary-dark text-sm font-bold rounded-full">
-              {gestation}
-            </div>
-          ) : (
-            <Link to="/profile" className="text-sm font-medium text-primary hover:underline">
-              Add your due date to track your pregnancy →
-            </Link>
-          )}
+          <Link to="/profile" className="text-sm font-medium text-primary hover:underline">
+            Keep your details up to date →
+          </Link>
         </div>
         <div className="w-16 h-16 shrink-0 bg-primary text-white rounded-full flex items-center justify-center font-bold text-2xl shadow-sm">
           {firstName.charAt(0).toUpperCase()}

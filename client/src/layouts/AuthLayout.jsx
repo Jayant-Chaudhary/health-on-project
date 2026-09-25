@@ -7,9 +7,9 @@ export default function AuthLayout() {
       {/* Mobile header (only header is green on mobile) */}
       <div className="lg:hidden flex items-center gap-3 px-6 py-4 bg-green-800 text-slate-100 shadow-sm">
         <div className="w-8 h-8 bg-slate-100 rounded-lg flex items-center justify-center text-green-800 font-bold text-base shadow-sm">
-          H
+          M
         </div>
-        <span className="text-xl font-bold tracking-tight text-slate-100">HealthOn</span>
+        <span className="text-xl font-bold tracking-tight text-slate-100">MedBrief</span>
       </div>
 
       {/* Left side: branding/imagery (desktop web view) */}
@@ -17,12 +17,12 @@ export default function AuthLayout() {
         <div className="relative z-10">
           <div className="flex items-center gap-3 mb-12">
             <div className="w-10 h-10 bg-slate-100 rounded-lg flex items-center justify-center text-green-800 font-bold text-xl shadow-sm">
-              H
+              M
             </div>
-            <span className="text-2xl font-bold tracking-tight text-slate-100">HealthOn</span>
+            <span className="text-2xl font-bold tracking-tight text-slate-100">MedBrief</span>
           </div>
           <h1 className="text-5xl font-bold leading-tight mb-6 text-slate-100">
-            Modern way of Counsltancy,<br />unified.
+            Modern way of consultancy,<br />unified.
           </h1>
           <p className="text-slate-200 text-lg max-w-md">
             Assist the doctor and patient by pre-visit lists,Unified dashboard 

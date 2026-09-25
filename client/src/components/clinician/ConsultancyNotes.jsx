@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { SectionCard } from '../common/SectionCard.jsx';
 import { useAutosave } from '../../hooks/useAutosave.js';
+import { ChecklistPicker } from './ChecklistPicker.jsx';
 
 const STATUS_TEXT = {
   idle: '',
@@ -10,8 +11,19 @@ const STATUS_TEXT = {
   error: 'Save failed — retry',
 };
 
-/** Free-text clinical observations, auto-saved so nothing is lost mid-consult. */
-export function ConsultancyNotes({ notes, onSave }) {
+/**
+ * The consultation record: the clinician's standard items ticked off, plus
+ * free-text observations for this patient, auto-saved so nothing is lost
+ * mid-consult.
+ */
+export function ConsultancyNotes({
+  notes,
+  onSave,
+  templates = [],
+  checkedItems = [],
+  onCheckItem,
+  onUncheckItem,
+}) {
   const [text, setText] = useState(notes?.text ?? '');
   const { status, savedAt, schedule } = useAutosave(onSave);
 
@@ -53,6 +65,19 @@ export function ConsultancyNotes({ notes, onSave }) {
       }
       bodyClassName="p-4"
     >
+      <div className="mb-4">
+        <h3 className="mb-2 text-label-sm uppercase text-ink-3">Consultation checklist</h3>
+        <ChecklistPicker
+          templates={templates}
+          selected={checkedItems}
+          onAdd={onCheckItem}
+          onRemove={onUncheckItem}
+          placeholder="Add an item for this consultation…"
+          emptyHint="Save your standard consultation items under Checklists to tick them here."
+        />
+      </div>
+
+      <h3 className="mb-2 text-label-sm uppercase text-ink-3">Notes</h3>
       <label className="sr-only" htmlFor="consultancy-notes">
         Consultancy notes
       </label>

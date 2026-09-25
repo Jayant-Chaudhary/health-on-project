@@ -50,7 +50,7 @@ export default function LoginPage() {
   return (
     <div className="w-full">
       <h2 className="text-3xl font-bold text-slate-900 mb-2">Welcome back</h2>
-      <p className="text-slate-600 mb-6">Sign in to your HealthOn account</p>
+      <p className="text-slate-600 mb-6">Sign in to your MedBrief account</p>
 
       {error && (
         <div className="p-3 mb-6 bg-red-50 text-red-700 border border-red-200 rounded-lg text-sm">

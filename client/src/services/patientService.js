@@ -10,7 +10,7 @@ export const patientService = {
 
   /**
    * Every appointment the patient has, newest first, split into upcoming and
-   * past. A patient sees several doctors over a pregnancy, so the dashboard
+   * past. A patient sees several doctors over time, so the dashboard
    * lists them rather than silently picking one.
    */
   async getAppointments() {

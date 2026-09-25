@@ -68,7 +68,7 @@ export default function SymptomsStep() {
   const handleNext = async () => {
     setSaving(true);
     try {
-      await checkinService.saveAnswers(appointmentId, answers);
+      if (questions.length > 0) await checkinService.saveAnswers(appointmentId, answers);
       navigate('/checkin/checklist');
     } catch (err) {
       showToast(err.message || 'Could not save your answers.', 'error');
@@ -77,7 +77,8 @@ export default function SymptomsStep() {
     }
   };
 
-  const allAnswered = questions.length > 0 && questions.every(q => answers[q.id]?.value !== undefined);
+  // A visit with no questions has nothing to answer; the patient moves straight on.
+  const allAnswered = questions.every(q => answers[q.id]?.value !== undefined);
 
   if (loading || contextLoading) {
     return (
@@ -106,6 +107,12 @@ export default function SymptomsStep() {
         <h2 className="text-2xl font-bold text-ink mb-2">How are you feeling today?</h2>
         <p className="text-ink-soft">Your doctor will review these answers before your consultation begins.</p>
       </div>
+
+      {questions.length === 0 && (
+        <Card className="p-5">
+          <p className="text-ink-soft">Your clinician has no questions for you before this visit.</p>
+        </Card>
+      )}
 
       <div className="space-y-6">
         {questions.map(q => {
