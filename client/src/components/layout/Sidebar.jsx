@@ -1,6 +1,7 @@
 import { NavLink } from 'react-router-dom';
 import { Icon } from '../common/Icon.jsx';
 import { Avatar } from '../common/Avatar.jsx';
+import { ThemeToggle } from '../common/ThemeToggle.jsx';
 import { useAuthContext } from '../../context/AuthContext.jsx';
 
 const NAV_ITEMS = [
@@ -28,9 +29,7 @@ export function Sidebar({ collapsed, onToggle }) {
                   ${collapsed ? 'w-[72px]' : 'w-[248px]'}`}
     >
       <div className={`flex items-center gap-3 px-4 py-4 ${collapsed ? 'justify-center' : ''}`}>
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-cypress font-display text-label-lg text-surface">
-          M
-        </span>
+        <img src="/logo-mark.png" alt="MedBrief" className="h-10 w-10 shrink-0 object-contain" />
         {!collapsed && (
           <div className="min-w-0 flex-1">
             <p className="font-display text-label-lg text-ink">MedBrief</p>
@@ -81,8 +80,12 @@ export function Sidebar({ collapsed, onToggle }) {
         ))}
       </nav>
 
-      <div className={`border-t border-line p-3 ${collapsed ? 'flex justify-center' : ''}`}>
-        <NavLink to="/clinician/profile" className="flex items-center gap-3 rounded-xl p-1 transition-colors hover:bg-line/50">
+      {/* In the sidebar because every clinician page has one; not every page has the top bar. */}
+      <div className={`flex gap-2 border-t border-line p-3 ${collapsed ? 'flex-col items-center' : 'items-center'}`}>
+        <NavLink
+          to="/clinician/profile"
+          className="flex min-w-0 flex-1 items-center gap-3 rounded-xl p-1 transition-colors hover:bg-line/50"
+        >
           <Avatar name={clinicianName} size="sm" tone="cypress" />
           {!collapsed && (
             <div className="min-w-0 flex-1">
@@ -91,6 +94,7 @@ export function Sidebar({ collapsed, onToggle }) {
             </div>
           )}
         </NavLink>
+        <ThemeToggle />
       </div>
     </aside>
   );

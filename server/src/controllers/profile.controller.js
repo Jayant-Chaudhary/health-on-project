@@ -1,4 +1,5 @@
 const supabaseAdmin = require('../config/supabaseAdminClient');
+const env = require('../config/env');
 
 function shapeProfile(profile, details, role) {
   const base = {
@@ -106,4 +107,33 @@ async function updateProfile(req, res, next) {
   }
 }
 
-module.exports = { getProfile, updateProfile, shapeProfile };
+/**
+ * Demo only: a clinician marks their own account verified.
+ *
+ * Verification is normally an administrator's decision
+ * (scripts/verifyClinician.js). This shortcut exists so a demo can go from
+ * sign-up to dashboard without one, and refuses to run once
+ * DEMO_SELF_VERIFY=false.
+ */
+async function demoVerify(req, res, next) {
+  try {
+    if (!env.demoSelfVerify) {
+      return res.status(403).json({ error: 'Self-verification is turned off. An administrator must verify you.' });
+    }
+    if (req.user.role !== 'clinician') {
+      return res.status(403).json({ error: 'Only clinician accounts are verified' });
+    }
+
+    const { error } = await supabaseAdmin
+      .from('clinician_details')
+      .upsert({ profile_id: req.user.id, is_verified: true }, { onConflict: 'profile_id' });
+
+    if (error) throw error;
+
+    res.json({ isVerified: true });
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { getProfile, updateProfile, shapeProfile, demoVerify };

@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
-import { User, Save } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { User, Save, LogOut } from 'lucide-react';
+import { useAuthContext } from '../../context/AuthContext';
 import { usePatientContext } from '../../context/PatientContext';
 import { useToast } from '../../context/ToastContext';
 import { profileService } from '../../services/profileService';
@@ -27,6 +29,20 @@ function toForm(profile) {
 export default function ProfilePage() {
   const { profile, loading, refresh } = usePatientContext();
   const { showToast } = useToast();
+  const { logout } = useAuthContext();
+  const navigate = useNavigate();
+  const [signingOut, setSigningOut] = useState(false);
+
+  async function handleLogout() {
+    setSigningOut(true);
+    const { error } = (await logout()) ?? {};
+    if (error) {
+      showToast(error.message || 'Could not sign you out.', 'error');
+      setSigningOut(false);
+      return;
+    }
+    navigate('/login', { replace: true });
+  }
 
   const [form, setForm] = useState(() => toForm(profile));
   const [saving, setSaving] = useState(false);
@@ -133,7 +149,22 @@ export default function ProfilePage() {
         </form>
 
         <div className="space-y-6">
-          <VitalsCard />
+          <VitalsCard canEditWeight />
+
+          <Card className="p-6">
+            <h3 className="font-bold text-lg text-ink mb-1">Sign out</h3>
+            <p className="text-sm text-ink-soft mb-4">End your session on this device.</p>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={handleLogout}
+              isLoading={signingOut}
+              className="w-full gap-2 text-attention-dark"
+            >
+              <LogOut size={18} />
+              {signingOut ? 'Signing out…' : 'Sign out'}
+            </Button>
+          </Card>
         </div>
       </div>
     </div>

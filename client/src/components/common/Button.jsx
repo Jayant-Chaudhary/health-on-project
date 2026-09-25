@@ -1,6 +1,6 @@
 const VARIANTS = {
   primary: 'bg-cypress text-surface hover:bg-cypress-deep active:shadow-[inset_0_2px_4px_rgba(0,0,0,0.15)]',
-  secondary: 'border border-line bg-subcanvas text-cypress hover:bg-[#F3ECE0]',
+  secondary: 'border border-line bg-subcanvas text-cypress hover:bg-canvas-alt',
   ghost: 'text-ink-2 hover:bg-subcanvas hover:text-ink',
   urgent: 'bg-terracotta text-white hover:bg-terracotta-deep',
 };

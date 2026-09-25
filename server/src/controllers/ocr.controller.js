@@ -20,6 +20,7 @@ async function recognizeUpload(req, res, next) {
       buffer: req.file.buffer,
       filename: req.file.originalname,
       contentType: req.file.mimetype,
+      requestId: req.id,
     });
 
     const pages = Array.isArray(result?.data) ? result.data : [];

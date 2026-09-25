@@ -21,7 +21,7 @@ export default function CheckinDonePage() {
           Your check-in is complete. The doctor has received your symptoms and lab reports.
         </p>
 
-        <Card className="bg-white p-6 mt-8 shadow-sm">
+        <Card className="bg-raised p-6 mt-8 shadow-sm">
           <h3 className="font-bold text-ink mb-2">What happens next?</h3>
           <p className="text-sm text-ink-soft">
             Please arrive at the clinic 10 minutes before your scheduled appointment time. Bring the physical copies of the items from your checklist.

@@ -78,7 +78,7 @@ DEGRADED_STATUSES: frozenset[str] = frozenset({"partial"})
 
 #: Below this mean OCR confidence the report is flagged `partial`, which makes
 #: the Node triage service raise the "bring the physical report" checklist item.
-OCR_PARTIAL_CONFIDENCE = 0.75
+OCR_PARTIAL_CONFIDENCE = 0.85
 
 #: Guard against a caller handing us a 2GB "PDF". Generous on purpose.
 MAX_FILE_BYTES = 64 * 1024 * 1024

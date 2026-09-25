@@ -328,7 +328,7 @@ export default function NewAppointment() {
                           type="checkbox"
                           checked={selectedQuestionIds.has(question.id)}
                           onChange={() => toggleQuestion(question.id)}
-                          className="mt-1 h-4 w-4 accent-[#2C4035]"
+                          className="mt-1 h-4 w-4 accent-cypress"
                         />
                         <span className="text-body-md text-ink">
                           {question.question_text}
@@ -398,7 +398,7 @@ export default function NewAppointment() {
                       type="checkbox"
                       checked={saveDraftToLibrary}
                       onChange={(e) => setSaveDraftToLibrary(e.target.checked)}
-                      className="h-4 w-4 accent-[#2C4035]"
+                      className="h-4 w-4 accent-cypress"
                     />
                     Also save to my library
                   </label>

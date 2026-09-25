@@ -139,7 +139,7 @@ export default function ChecklistStep() {
         </Card>
       </div>
 
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-ink-soft/10 p-4 z-40 max-w-3xl mx-auto">
+      <div className="fixed bottom-0 left-0 right-0 bg-raised border-t border-ink-soft/10 p-4 z-40 max-w-3xl mx-auto">
         <Button
           className="w-full"
           onClick={handleSubmit}

@@ -87,8 +87,8 @@ export function TrendChart({ series = [], unit = '', status = 'pending', referen
           const ty = PAD.top + (index / (ticks.length - 1)) * plotH;
           return (
             <g key={value}>
-              <line x1={PAD.left} y1={ty} x2={VIEW_W - PAD.right} y2={ty} stroke="#EAE3D6" strokeWidth="1" />
-              <text x={PAD.left - 8} y={ty + 4} textAnchor="end" fontSize="11" fill="#91877E" className="tabular">
+              <line x1={PAD.left} y1={ty} x2={VIEW_W - PAD.right} y2={ty} strokeWidth="1" className="stroke-line" />
+              <text x={PAD.left - 8} y={ty + 4} textAnchor="end" fontSize="11" className="tabular fill-ink-3">
                 {formatTick(value)}
               </text>
             </g>
@@ -118,10 +118,10 @@ export function TrendChart({ series = [], unit = '', status = 'pending', referen
               cy={point.cy}
               r={hoverIndex === index || index === points.length - 1 ? 5 : 4}
               fill={tone.stroke}
-              stroke="#FFFDFB"
+              className="stroke-surface"
               strokeWidth="2"
             />
-            <text x={point.cx} y={VIEW_H - 8} textAnchor="middle" fontSize="11" fill="#91877E">
+            <text x={point.cx} y={VIEW_H - 8} textAnchor="middle" fontSize="11" className="fill-ink-3">
               {formatShortDate(point.date)}
             </text>
           </g>

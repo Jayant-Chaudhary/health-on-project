@@ -42,7 +42,7 @@ export default function UploadZone({ onUpload, disabled = false }) {
   return (
     <Card 
       className={`border-2 border-dashed transition-all duration-200 ${
-        isDragging ? 'border-primary bg-primary-light/50' : 'border-ink-soft/30 bg-canvas hover:bg-white hover:border-primary/50'
+        isDragging ? 'border-primary bg-primary-light/50' : 'border-ink-soft/30 bg-canvas hover:bg-raised hover:border-primary/50'
       }`}
       onDragEnter={handleDrag}
       onDragLeave={handleDrag}
@@ -50,7 +50,7 @@ export default function UploadZone({ onUpload, disabled = false }) {
       onDrop={handleDrop}
     >
       <div className="flex flex-col items-center justify-center p-8 text-center">
-        <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mb-4 shadow-sm text-primary">
+        <div className="w-16 h-16 bg-raised rounded-full flex items-center justify-center mb-4 shadow-sm text-primary">
           <UploadCloud size={32} />
         </div>
         <h3 className="font-bold text-lg text-ink mb-2">Upload a Lab Report</h3>

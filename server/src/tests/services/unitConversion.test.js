@@ -49,17 +49,66 @@ describe('convertUnit', () => {
     });
   });
 
-  describe('mg/dl <-> mmol/l', () => {
-    it('converts mg/dl to mmol/l by dividing by 18', () => {
-      const result = convertUnit(180, 'mg/dl', 'mmol/l');
+  describe('mg/dl <-> mmol/l (per analyte)', () => {
+    it('converts glucose mg/dl to mmol/l using its molar mass', () => {
+      const result = convertUnit(180.16, 'mg/dl', 'mmol/l', 'blood_glucose_fasting');
       expect(result.converted).toBe(true);
       expect(result.value).toBeCloseTo(10, 5);
     });
 
-    it('converts mmol/l to mg/dl by multiplying by 18', () => {
-      const result = convertUnit(5, 'mmol/l', 'mg/dl');
+    it('converts glucose mmol/l to mg/dl', () => {
+      const result = convertUnit(5.5, 'mmol/l', 'mg/dl', 'blood_glucose_fasting');
       expect(result.converted).toBe(true);
-      expect(result.value).toBeCloseTo(90, 5);
+      expect(result.value).toBeCloseTo(99.09, 2);
+    });
+
+    it("uses cholesterol's own factor, not glucose's", () => {
+      const result = convertUnit(5, 'mmol/L', 'mg/dL', 'cholesterol_total');
+      expect(result.converted).toBe(true);
+      expect(result.value).toBeCloseTo(193.3, 1);
+    });
+
+    it('converts creatinine µmol/L to mg/dL', () => {
+      const result = convertUnit(88.4, 'µmol/L', 'mg/dL', 'creatinine');
+      expect(result.value).toBeCloseTo(1, 3);
+    });
+
+    it('refuses mass <-> molar without an analyte rather than guess', () => {
+      expect(convertUnit(180, 'mg/dl', 'mmol/l')).toEqual({ value: 180, converted: false });
+      expect(convertUnit(40, 'U/L', 'mmol/l', 'alt')).toEqual({ value: 40, converted: false });
+    });
+
+    it('converts mEq/L through the analyte valence', () => {
+      expect(convertUnit(140, 'mEq/L', 'mmol/L', 'sodium').value).toBeCloseTo(140, 5);
+      expect(convertUnit(5, 'mEq/L', 'mg/dL', 'calcium').value).toBeCloseTo(10.02, 2);
+    });
+  });
+
+  describe('lab unit spellings', () => {
+    it.each([
+      ['lakh/cu.mm', '10^3/µL', 2.5, 250],
+      ['mill/cumm', '10^6/µL', 4.8, 4.8],
+      ['thou/mm3', '10^3/µL', 7.2, 7.2],
+      ['cells/cumm', '10^3/µL', 7200, 7.2],
+      ['x10^9/L', '10^3/µL', 7.2, 7.2],
+      ['mg/dL.', 'mg/dL', 1.1, 1.1],
+      ['mcg/dL', 'µg/dL', 80, 80],
+      ['ug/dl', 'µg/dL', 80, 80],
+      ['uIU/ml', 'µIU/mL', 2.1, 2.1],
+      ['mIU/L', 'µIU/mL', 2.1, 2.1],
+      ['IU/L', 'U/L', 30, 30],
+      ['gm%', 'g/dL', 13.5, 13.5],
+      ['mm/1st hr', 'mm/hr', 12, 12],
+      ['mg/L', 'mg/dL', 10, 1],
+    ])('%s -> %s', (from, to, value, expected) => {
+      const result = convertUnit(value, from, to);
+      expect(result.converted).toBe(true);
+      expect(result.value).toBeCloseTo(expected, 6);
+    });
+
+    it('converts HbA1c between IFCC mmol/mol and NGSP %', () => {
+      expect(convertUnit(48, 'mmol/mol', '%', 'hba1c').value).toBeCloseTo(6.54, 2);
+      expect(convertUnit(6.5, '%', 'mmol/mol', 'hba1c').value).toBeCloseTo(47.5, 1);
     });
   });
 
@@ -97,15 +146,15 @@ describe('convertUnit', () => {
 
   describe('case-insensitive unit normalisation', () => {
     it('treats MG/DL and mg/dl as the same source unit', () => {
-      const result = convertUnit(180, 'MG/DL', 'mmol/l');
+      const result = convertUnit(180.16, 'MG/DL', 'mmol/l', 'blood_glucose_fasting');
       expect(result.converted).toBe(true);
       expect(result.value).toBeCloseTo(10, 5);
     });
 
     it('treats MMOL/L and mmol/l as the same source unit', () => {
-      const result = convertUnit(5, 'MMOL/L', 'mg/dl');
+      const result = convertUnit(5, 'MMOL/L', 'mg/dl', 'blood_glucose_fasting');
       expect(result.converted).toBe(true);
-      expect(result.value).toBeCloseTo(90, 5);
+      expect(result.value).toBeCloseTo(90.08, 5);
     });
 
     it('trims whitespace from unit strings before matching', () => {

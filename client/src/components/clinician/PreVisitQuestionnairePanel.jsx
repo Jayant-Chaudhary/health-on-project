@@ -48,6 +48,8 @@ export function PreVisitQuestionnairePanel({ questionnaire }) {
       </button>
 
       {open && (
+        // Capped and scrolled on its own, so a long questionnaire never
+        // squeezes the work columns below it off the screen.
         <div className="grid gap-3 border-t border-line px-5 py-4 sm:grid-cols-2 xl:grid-cols-3">
           {ordered.map((answer) => {
             const flag = isRedFlag(answer);

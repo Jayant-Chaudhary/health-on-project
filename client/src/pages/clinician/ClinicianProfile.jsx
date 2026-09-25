@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Save, ShieldCheck, ShieldAlert } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Save, ShieldCheck, ShieldAlert, LogOut } from 'lucide-react';
+import { useAuthContext } from '../../context/AuthContext.jsx';
 import { profileService } from '../../services/profileService';
 import { useToast } from '../../context/ToastContext';
 import { Sidebar } from '../../components/layout/Sidebar.jsx';
@@ -23,7 +25,21 @@ export default function ClinicianProfile() {
   const [form, setForm] = useState({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
   const { showToast } = useToast();
+  const { logout } = useAuthContext();
+  const navigate = useNavigate();
+
+  async function handleLogout() {
+    setSigningOut(true);
+    const { error } = (await logout()) ?? {};
+    if (error) {
+      showToast(error.message || 'Could not sign you out.', 'error');
+      setSigningOut(false);
+      return;
+    }
+    navigate('/login', { replace: true });
+  }
 
   useEffect(() => {
     profileService
@@ -116,6 +132,14 @@ export default function ClinicianProfile() {
               </Button>
             </form>
           )}
+
+          {/* Outside the loading branch: signing out must work even if the profile failed to load. */}
+          <SectionCard icon="logout" title="Sign out" subtitle="End your session on this device" className="mt-4" bodyClassName="p-5">
+            <Button type="button" variant="urgent" onClick={handleLogout} disabled={signingOut} className="w-full">
+              <LogOut size={16} />
+              {signingOut ? 'Signing out…' : 'Sign out'}
+            </Button>
+          </SectionCard>
         </div>
       </main>
     </div>

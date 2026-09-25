@@ -31,7 +31,7 @@ export default function ClinicianOnboarding() {
       if (!result.success) throw result.error;
       
       // Redirect to the pending verification screen or dashboard
-      navigate('/clinician');
+      navigate('/clinician', { replace: true });
     } catch (err) {
       setError(err.message || 'Failed to update profile.');
     } finally {
@@ -40,12 +40,12 @@ export default function ClinicianOnboarding() {
   };
 
   return (
-    <div className="max-w-2xl w-full mx-auto p-8 bg-white rounded-xl shadow-sm border border-slate-200 mt-12">
-      <h2 className="text-2xl font-bold text-slate-900 mb-2">Doctor Verification</h2>
-      <p className="text-slate-600 mb-8">Please provide your details for NMC verification.</p>
+    <div className="max-w-2xl w-full mx-auto p-8 bg-raised rounded-xl shadow-sm border border-line mt-12">
+      <h2 className="text-2xl font-bold text-ink mb-2">Doctor Verification</h2>
+      <p className="text-ink-2 mb-8">Please provide your details for NMC verification.</p>
 
       {error && (
-        <div className="p-3 mb-6 bg-red-50 text-red-700 border border-red-200 rounded-lg text-sm">
+        <div className="p-3 mb-6 bg-terracotta-surface text-terracotta-deep border border-terracotta-border rounded-lg text-sm">
           {error}
         </div>
       )}
@@ -106,9 +106,9 @@ export default function ClinicianOnboarding() {
           type="button"
           onClick={async () => {
             await logout();
-            navigate('/login');
+            navigate('/login', { replace: true });
           }}
-          className="w-full mt-4 text-sm font-medium text-slate-500 hover:text-slate-700 transition-colors"
+          className="w-full mt-4 text-sm font-medium text-ink-3 hover:text-ink-2 transition-colors"
         >
           Log out
         </button>

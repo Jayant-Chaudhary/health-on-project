@@ -11,7 +11,7 @@ export function Stepper({ steps, currentStep, className }) {
             <div className="flex flex-col items-center">
               <div className={cn(
                 "flex items-center justify-center w-8 h-8 rounded-full border-2 text-sm font-medium transition-colors",
-                isActive ? "border-primary bg-primary text-white" : "border-gray-300 text-gray-500"
+                isActive ? "border-primary bg-primary text-white" : "border-line-strong text-ink-3"
               )}>
                 {index + 1}
               </div>
@@ -19,7 +19,7 @@ export function Stepper({ steps, currentStep, className }) {
             {index < steps.length - 1 && (
               <div className={cn(
                 "flex-1 h-0.5 mx-2 transition-colors",
-                index < currentStep ? "bg-primary" : "bg-gray-200"
+                index < currentStep ? "bg-primary" : "bg-line"
               )} />
             )}
           </React.Fragment>

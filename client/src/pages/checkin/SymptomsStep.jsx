@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { checkinService } from '../../services/checkinService';
+import { reportService } from '../../services/reportService';
 import { usePatientContext } from '../../context/PatientContext';
 import { useToast } from '../../context/ToastContext';
 import { Card } from '../../components/ui/Card';
@@ -28,6 +29,10 @@ export default function SymptomsStep() {
 
     let cancelled = false;
     setLoading(true);
+
+    // Starting check-in brings the patient's earlier reports to this visit so
+    // the clinician can see them. Best-effort: check-in still works without it.
+    reportService.shareAllWithAppointment(appointmentId).catch(() => {});
 
     Promise.all([checkinService.getQuestions(appointmentId), checkinService.getAnswers(appointmentId)])
       .then(([questionRows, answerRows]) => {
@@ -166,7 +171,7 @@ export default function SymptomsStep() {
       </div>
 
       {/* Sticky footer for action button */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-ink-soft/10 p-4 z-40 max-w-3xl mx-auto">
+      <div className="fixed bottom-0 left-0 right-0 bg-raised border-t border-ink-soft/10 p-4 z-40 max-w-3xl mx-auto">
         <Button
           className="w-full"
           onClick={handleNext}

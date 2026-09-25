@@ -1,13 +1,21 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { usePatientContext } from '../../context/PatientContext';
 import { useToast } from '../../context/ToastContext';
 import { patientService } from '../../services/patientService';
-import { Plus, Minus, Activity } from 'lucide-react';
+import { Plus, Minus, Activity, ChevronRight } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 
-export default function VitalsCard() {
+/**
+ * Weight and (optional) home blood pressure.
+ *
+ * Weight is changed only from the Profile page (`canEditWeight`). Elsewhere
+ * the card shows the last logged weight read-only with a link to Profile, and
+ * still lets the patient log a blood-pressure reading.
+ */
+export default function VitalsCard({ canEditWeight = false }) {
   const { vitals, activeAppointment, refresh } = usePatientContext();
   const { showToast } = useToast();
   
@@ -20,11 +28,16 @@ export default function VitalsCard() {
   const [diastolic, setDiastolic] = useState('');
   const [saving, setSaving] = useState(false);
 
+  const hasBp = showBp && systolic !== '' && diastolic !== '';
+  // Without the weight control there is only blood pressure to save.
+  const canSave = canEditWeight || hasBp;
+
   const handleSave = async () => {
+    if (!canSave) return;
     setSaving(true);
 
-    const metrics = [{ metricKey: 'weight', value: weight, unit: 'kg' }];
-    if (showBp && systolic && diastolic) {
+    const metrics = canEditWeight ? [{ metricKey: 'weight', value: weight, unit: 'kg' }] : [];
+    if (hasBp) {
       metrics.push({ metricKey: 'blood_pressure_systolic', value: systolic, unit: 'mmHg' });
       metrics.push({ metricKey: 'blood_pressure_diastolic', value: diastolic, unit: 'mmHg' });
     }
@@ -48,25 +61,41 @@ export default function VitalsCard() {
         <h3 className="font-bold text-ink text-lg">Quick Vitals Update</h3>
       </div>
       
+      {canEditWeight ? (
       <div className="bg-canvas rounded-xl p-4 mb-4 flex items-center justify-between">
         <span className="font-medium text-ink">Weight (kg)</span>
         <div className="flex items-center gap-3">
           <button 
             onClick={() => setWeight(w => parseFloat((w - 0.1).toFixed(1)))}
-            className="w-10 h-10 rounded-full bg-white shadow-sm flex items-center justify-center text-primary active:scale-95 transition-transform"
+            className="w-10 h-10 rounded-full bg-raised shadow-sm flex items-center justify-center text-primary active:scale-95 transition-transform"
           >
             <Minus size={20} />
           </button>
           <span className="text-xl font-bold w-16 text-center">{weight.toFixed(1)}</span>
           <button 
             onClick={() => setWeight(w => parseFloat((w + 0.1).toFixed(1)))}
-            className="w-10 h-10 rounded-full bg-white shadow-sm flex items-center justify-center text-primary active:scale-95 transition-transform"
+            className="w-10 h-10 rounded-full bg-raised shadow-sm flex items-center justify-center text-primary active:scale-95 transition-transform"
           >
             <Plus size={20} />
           </button>
         </div>
       </div>
-      
+      ) : (
+        <Link
+          to="/profile"
+          className="bg-canvas rounded-xl p-4 mb-4 flex items-center justify-between transition-colors hover:bg-canvas-alt"
+        >
+          <span className="font-medium text-ink">Weight</span>
+          <span className="flex items-center gap-2">
+            <span className="text-xl font-bold text-ink">
+              {vitals?.weight ? `${Number(vitals.weight.value).toFixed(1)} kg` : 'Not recorded'}
+            </span>
+            <span className="text-sm font-bold text-primary">Update in Profile</span>
+            <ChevronRight size={18} className="text-primary" />
+          </span>
+        </Link>
+      )}
+
       {vitals?.weight && (
         <p className="text-xs text-ink-soft mb-4 text-center">
           Last logged: {vitals.weight.value} kg ·{' '}
@@ -83,7 +112,7 @@ export default function VitalsCard() {
               placeholder="120"
               value={systolic}
               onChange={e => setSystolic(e.target.value)}
-              className="w-full bg-white rounded-lg p-3 text-center font-bold focus-visible:ring-2 ring-primary outline-none" 
+              className="w-full bg-raised rounded-lg p-3 text-center font-bold focus-visible:ring-2 ring-primary outline-none" 
             />
             <span className="text-ink-soft text-xl">/</span>
             <input 
@@ -91,7 +120,7 @@ export default function VitalsCard() {
               placeholder="80"
               value={diastolic}
               onChange={e => setDiastolic(e.target.value)}
-              className="w-full bg-white rounded-lg p-3 text-center font-bold focus-visible:ring-2 ring-primary outline-none" 
+              className="w-full bg-raised rounded-lg p-3 text-center font-bold focus-visible:ring-2 ring-primary outline-none" 
             />
           </div>
         </div>
@@ -108,9 +137,9 @@ export default function VitalsCard() {
         variant="outline" 
         className="w-full border-primary text-primary hover:bg-primary-light"
         onClick={handleSave}
-        disabled={saving}
+        disabled={saving || !canSave}
       >
-        {saving ? 'Saving...' : 'Save today\'s vitals'}
+        {saving ? 'Saving...' : canEditWeight ? 'Save today\'s vitals' : 'Save blood pressure'}
       </Button>
     </Card>
   );

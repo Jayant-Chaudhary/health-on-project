@@ -61,7 +61,7 @@ export default function ActionBanner() {
         <p className="text-sm font-medium text-primary">{content.subtitle}</p>
       </div>
 
-      <div className="bg-white/60 rounded-lg p-3 mb-4 space-y-1">
+      <div className="bg-raised/60 rounded-lg p-3 mb-4 space-y-1">
         <p className="text-sm font-bold text-ink">{format(date, 'MMM d, yyyy · h:mm a')}</p>
         <p className="text-xs text-ink-soft">
           {activeAppointment.clinician?.full_name ?? 'Your clinician'}
@@ -73,7 +73,7 @@ export default function ActionBanner() {
           {content.btnText}
         </Button>
         {content.secondaryBtnText && (
-          <Button onClick={content.secondaryBtnAction} variant="secondary" className="w-full bg-white">
+          <Button onClick={content.secondaryBtnAction} variant="secondary" className="w-full bg-raised">
             {content.secondaryBtnText}
           </Button>
         )}

@@ -23,9 +23,15 @@ export function ConsultancyNotes({
   checkedItems = [],
   onCheckItem,
   onUncheckItem,
+  flushRef,
 }) {
   const [text, setText] = useState(notes?.text ?? '');
-  const { status, savedAt, schedule } = useAutosave(onSave);
+  const { status, savedAt, schedule, flush } = useAutosave(onSave);
+
+  // Lets the dashboard save unsaved notes before it ends the visit.
+  useEffect(() => {
+    if (flushRef) flushRef.current = flush;
+  }, [flushRef, flush]);
 
   // Re-seed when the clinician switches patients.
   useEffect(() => {

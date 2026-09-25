@@ -1,4 +1,5 @@
 require('dotenv').config();
+const logger = require('../utils/logger');
 
 const required = [
   'SUPABASE_URL',
@@ -10,7 +11,7 @@ const required = [
 
 for (const key of required) {
   if (!process.env[key]) {
-    console.warn(`[Config Warning]: Missing environment variable: ${key}. Using default fallback if applicable.`);
+    logger.warn(`Missing environment variable ${key}; using default fallback if applicable`, { scope: 'config' });
   }
 }
 
@@ -29,7 +30,7 @@ module.exports = {
     from: process.env.SMTP_FROM || 'no-reply@medbrief.app',
   },
   inviteTokenTtlHours: Number(process.env.INVITE_TOKEN_TTL_HOURS || 72),
-  ocrMetricReviewThreshold: Number(process.env.OCR_CONFIDENCE_REVIEW_THRESHOLD || 0.75),
+  ocrMetricReviewThreshold: Number(process.env.OCR_CONFIDENCE_REVIEW_THRESHOLD || 0.85),
   ocr: {
     // Extraction runs in the OCR service (PaddleOCRFastAPI) at ocrServiceUrl.
     // A multi-page scan on CPU takes ~10s a page, and uploads queue behind
@@ -37,4 +38,8 @@ module.exports = {
     timeoutMs: Number(process.env.OCR_TIMEOUT_MS || 180000),
   },
   maxUploadBytes: Number(process.env.MAX_UPLOAD_BYTES || 20 * 1024 * 1024),
+  // Demo only: lets a clinician verify their own account from the
+  // verification-pending page. Set DEMO_SELF_VERIFY=false to switch it off
+  // once real (administrator) verification is in place.
+  demoSelfVerify: process.env.DEMO_SELF_VERIFY !== 'false',
 };

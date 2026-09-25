@@ -5,6 +5,7 @@ process.env.OCR_SERVICE_URL = `${BASE_URL}/`;
 
 const axios = require('axios');
 const env = require('../../config/env');
+const logger = require('../../utils/logger');
 const { extractFromFile, processDocument, checkOcrHealth } = require('../../services/ocrService');
 
 jest.mock('axios');
@@ -17,11 +18,11 @@ const makeBuffer = (content = 'data') => Buffer.from(content);
 describe('ocrService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    jest.spyOn(console, 'warn').mockImplementation(() => {});
+    jest.spyOn(logger, 'warn').mockImplementation(() => {});
   });
 
   afterEach(() => {
-    console.warn.mockRestore();
+    logger.warn.mockRestore();
   });
 
   // ---------------------------------------------------------------------------
@@ -326,15 +327,15 @@ describe('ocrService', () => {
       await expect(checkOcrHealth()).resolves.toBe(false);
     });
 
-    it('logs a warning via console.warn when the request throws', async () => {
+    it('logs a warning when the request throws', async () => {
       const err = new Error('getaddrinfo ENOTFOUND localhost');
       axios.get.mockRejectedValue(err);
 
       await checkOcrHealth();
 
-      expect(console.warn).toHaveBeenCalledWith(
-        '[OCR] Health check failed:',
-        err.message
+      expect(logger.warn).toHaveBeenCalledWith(
+        `health check failed: ${err.message}`,
+        expect.objectContaining({ scope: 'ocr', url: `${BASE_URL}/health` })
       );
     });
 

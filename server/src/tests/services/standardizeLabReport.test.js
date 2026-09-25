@@ -17,7 +17,7 @@ jest.mock('../../config/supabaseAdminClient', () => ({
 // We mock env so the confidence threshold is deterministic regardless of
 // whatever .env file exists on the developer's machine.
 jest.mock('../../config/env', () => ({
-  ocrMetricReviewThreshold: 0.75,
+  ocrMetricReviewThreshold: 0.85,
 }));
 
 // ─── Helpers re-imported per test group that needs cache isolation ────────────
@@ -151,7 +151,7 @@ describe('standardizeMetrics', () => {
     jest.resetModules();
     // Re-mock after resetModules wipes the registry.
     jest.mock('../../config/supabaseAdminClient', () => ({ from: jest.fn() }));
-    jest.mock('../../config/env', () => ({ ocrMetricReviewThreshold: 0.75 }));
+    jest.mock('../../config/env', () => ({ ocrMetricReviewThreshold: 0.85 }));
     ({ standardizeMetrics } = require('../../services/standardization/standardizeLabReport.service'));
     // Re-get the fresh supabase mock reference.
     const freshSupabase = require('../../config/supabaseAdminClient');
@@ -209,9 +209,9 @@ describe('standardizeMetrics', () => {
     expect(result[0].needs_review).toBe(true);
   });
 
-  it('sets needs_review: true when confidence is below threshold (0.75)', async () => {
+  it('sets needs_review: true when confidence is below threshold (0.85)', async () => {
     const result = await standardizeMetrics([
-      { key: 'hemoglobin', value: 12, unit: 'g/dl', confidence: 0.6 },
+      { key: 'hemoglobin', value: 12, unit: 'g/dl', confidence: 0.84 },
     ]);
     expect(result[0].needs_review).toBe(true);
   });
@@ -219,7 +219,7 @@ describe('standardizeMetrics', () => {
   it('does NOT set needs_review for confidence exactly at threshold', async () => {
     // confidence === threshold → NOT below → should not flag
     const result = await standardizeMetrics([
-      { key: 'hemoglobin', value: 12, unit: 'g/dl', confidence: 0.75 },
+      { key: 'hemoglobin', value: 12, unit: 'g/dl', confidence: 0.85 },
     ]);
     expect(result[0].needs_review).toBe(false);
   });
@@ -232,15 +232,62 @@ describe('standardizeMetrics', () => {
     expect(result[0].parsed_value).toBeNull();
   });
 
-  it('sets standard_key: null and needs_review: true for an unknown metric key', async () => {
+  it('keeps a confident reading of an unknown metric key without flagging it', async () => {
     const result = await standardizeMetrics([
-      { key: 'unknown_analyte_xyz', value: 42, unit: 'mg/dl', confidence: 0.9 },
+      { key: 'unknown_analyte_xyz', value: 42, unit: 'mg/dl', confidence: 0.95 },
     ]);
     expect(result[0]).toMatchObject({
       standard_key: null,
-      needs_review: true,
+      needs_review: false,
       raw_key: 'unknown_analyte_xyz',
+      parsed_value: 42,
     });
+  });
+
+  it('flags an unknown metric key when its confidence is below threshold', async () => {
+    const result = await standardizeMetrics([
+      { key: 'unknown_analyte_xyz', value: 42, unit: 'mg/dl', confidence: 0.6 },
+    ]);
+    expect(result[0]).toMatchObject({ standard_key: null, needs_review: true });
+  });
+
+  it.each(['Negative', 'Trace', '2+', '++', 'Pale Yellow', 'Clear', 'Nil', 'Not Detected'])(
+    'accepts the qualitative result "%s" without flagging it',
+    async (value) => {
+      const result = await standardizeMetrics([{ key: 'mystery_dipstick', value, confidence: 0.95 }]);
+      expect(result[0]).toMatchObject({ needs_review: false, parsed_value: null, raw_value: value });
+    }
+  );
+
+  it.each(['0.00-20.00', '2-4', '12.5 – 15'])('keeps the range "%s" as printed without flagging it', async (value) => {
+    const result = await standardizeMetrics([{ key: 'hemoglobin', value, unit: 'g/dl', confidence: 0.95 }]);
+    expect(result[0]).toMatchObject({ needs_review: false, parsed_value: null, raw_value: value });
+  });
+
+  it('still flags a low-confidence range', async () => {
+    const result = await standardizeMetrics([{ key: 'hemoglobin', value: '2-4', unit: 'g/dl', confidence: 0.5 }]);
+    expect(result[0].needs_review).toBe(true);
+  });
+
+  it('matches a name by its bracketed abbreviation', async () => {
+    const result = await standardizeMetrics([{ key: 'Haemoglobin Estimation (Hb)', value: 13, unit: 'g/dl', confidence: 0.95 }]);
+    expect(result[0]).toMatchObject({ standard_key: 'hemoglobin', needs_review: false });
+  });
+
+  it('drops a method-only bracket but never an analyte qualifier', async () => {
+    const [method, qualifier] = await standardizeMetrics([
+      { key: 'Hemoglobin (Automated)', value: 13, unit: 'g/dl', confidence: 0.95 },
+      { key: 'Hemoglobin (Urine)', value: 13, unit: 'g/dl', confidence: 0.95 },
+    ]);
+    expect(method.standard_key).toBe('hemoglobin');
+    expect(qualifier.standard_key).toBeNull();
+  });
+
+  it('flags an unknown metric key whose value cannot be read', async () => {
+    const result = await standardizeMetrics([
+      { key: 'unknown_analyte_xyz', value: 'see report', unit: 'mg/dl', confidence: 0.95 },
+    ]);
+    expect(result[0]).toMatchObject({ standard_key: null, needs_review: true, parsed_value: null });
   });
 
   it('does not set needs_review when confidence is absent (null/undefined)', async () => {
@@ -324,7 +371,7 @@ describe('standardizeMetrics value parsing', () => {
   beforeEach(() => {
     jest.resetModules();
     jest.mock('../../config/supabaseAdminClient', () => ({ from: jest.fn() }));
-    jest.mock('../../config/env', () => ({ ocrMetricReviewThreshold: 0.75 }));
+    jest.mock('../../config/env', () => ({ ocrMetricReviewThreshold: 0.85 }));
     ({ standardizeMetrics } = require('../../services/standardization/standardizeLabReport.service'));
     require('../../config/supabaseAdminClient').from.mockReturnValue({
       select: jest.fn().mockReturnThis(),

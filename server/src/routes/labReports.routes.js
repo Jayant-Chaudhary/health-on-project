@@ -13,10 +13,12 @@ const {
   ingestReport,
   uploadReport,
   listReportsForPatient,
+  listSharedHistory,
   getMetricTrend,
   reviewMetric,
   listTriageQueue,
   shareReportWithAppointment,
+  shareAllReports,
   unshareReportFromAppointment,
   deleteReport,
 } = require('../controllers/labReports.controller');
@@ -48,10 +50,12 @@ router.post('/upload', upload.single('file'), uploadReport);
 router.post('/', validateBody(ocrPayloadSchema), ingestReport);
 
 router.get('/', listReportsForPatient);
+router.get('/history', roleGuard('clinician'), listSharedHistory);
 router.get('/trend/:standardKey', getMetricTrend);
 router.get('/triage/queue', roleGuard('clinician'), listTriageQueue);
 
 // Which of the patient's reports this appointment may see.
+router.post('/share-all', roleGuard('patient'), validateBody(shareReportSchema), shareAllReports);
 router.post('/:reportId/share', validateBody(shareReportSchema), shareReportWithAppointment);
 router.delete('/:reportId/share/:appointmentId', unshareReportFromAppointment);
 router.delete('/:reportId', deleteReport);

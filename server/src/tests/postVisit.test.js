@@ -135,7 +135,7 @@ describe('Post Visit API', () => {
       const mockActionItems = [{ id: 'ai-1' }];
       mockTables(supabaseAdmin, {
         profiles: profileRow('patient'),
-        appointments: ok(ownAppointment),
+        appointments: ok({ ...ownAppointment, status: 'completed' }),
         consultation_notes: ok(mockNotes),
         prescriptions: ok([{ id: 'rx-1', storage_path: 'p/rx-1.png' }]),
         post_visit_action_items: ok(mockActionItems),
@@ -146,6 +146,7 @@ describe('Post Visit API', () => {
 
       expect(response.status).toBe(200);
       expect(response.body).toEqual({
+        published: true,
         notes: mockNotes,
         prescriptions: [
           { id: 'rx-1', storage_path: 'p/rx-1.png', signed_url: 'https://signed.example/prescriptions/p/rx-1.png' },
@@ -165,6 +166,44 @@ describe('Post Visit API', () => {
       const response = await send('get', '/api/post-visit/appt-1');
 
       expect(response.status).toBe(403);
+    });
+
+    it('should hide the summary from the patient until the clinician ends the visit', async () => {
+      signInAs(mockPatient);
+      const chains = mockTables(supabaseAdmin, {
+        profiles: profileRow('patient'),
+        appointments: ok({ ...ownAppointment, status: 'checked_in' }),
+        consultation_notes: ok({ id: 'note-1', notes_text: 'draft' }),
+      });
+
+      const response = await send('get', '/api/post-visit/appt-1');
+
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual({
+        published: false,
+        notes: null,
+        prescriptions: [],
+        actionItems: [],
+        consultationChecklist: [],
+      });
+      expect(chains.consultation_notes).toBeUndefined();
+    });
+
+    it('should let the clinician read the summary while the visit is still open', async () => {
+      signInAs(mockClinician);
+      mockTables(supabaseAdmin, {
+        profiles: profileRow('clinician'),
+        appointments: ok({ ...ownAppointment, status: 'checked_in' }),
+        consultation_notes: ok({ id: 'note-1', notes_text: 'draft' }),
+        prescriptions: ok([]),
+        post_visit_action_items: ok([]),
+        consultation_checklist_items: ok([]),
+      });
+
+      const response = await send('get', '/api/post-visit/appt-1');
+
+      expect(response.status).toBe(200);
+      expect(response.body).toMatchObject({ published: false, notes: { notes_text: 'draft' } });
     });
   });
 

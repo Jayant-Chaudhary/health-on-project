@@ -69,6 +69,14 @@ export function AuthProvider({ children }) {
     return result;
   };
 
+  /** Re-reads the signed-in user's profile, e.g. after their verification changes. */
+  const refreshProfile = async () => {
+    if (!user) return null;
+    const updatedProfile = await fetchProfile(user.id);
+    setProfile(updatedProfile);
+    return updatedProfile;
+  };
+
   const value = {
     user,
     profile,
@@ -79,6 +87,7 @@ export function AuthProvider({ children }) {
     signup,
     logout,
     completeOnboarding,
+    refreshProfile,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

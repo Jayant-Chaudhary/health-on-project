@@ -3,6 +3,8 @@ const cors = require('cors');
 const cookieParser = require('cookie-parser');
 const env = require('./config/env');
 const errorHandler = require('./middleware/errorHandler');
+const requestLogger = require('./middleware/requestLogger');
+const logger = require('./utils/logger');
 
 const authRoutes = require('./routes/auth.routes');
 const appointmentsRoutes = require('./routes/appointments.routes');
@@ -18,7 +20,12 @@ const templatesRoutes = require('./routes/templates.routes');
 
 const app = express();
 
-app.use(cors({ origin: [env.clientAppUrl, 'http://localhost:5173', 'http://localhost:3000'], credentials: true }));
+app.use(requestLogger);
+app.use(cors({
+  origin: [env.clientAppUrl, 'http://localhost:5173', 'http://localhost:3000'],
+  credentials: true,
+  exposedHeaders: ['X-Request-Id'],
+}));
 app.use(express.json({ limit: '5mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
@@ -39,12 +46,24 @@ app.use('/api/ocr', ocrRoutes);
 app.use('/api/patients', patientsRoutes);
 app.use('/api/templates', templatesRoutes);
 
-app.use((req, res) => res.status(404).json({ error: 'Endpoint not found' }));
+app.use((req, res) => res.status(404).json({ error: 'Endpoint not found', requestId: req.id }));
 app.use(errorHandler);
 
 if (process.env.NODE_ENV !== 'test') {
+  process.on('unhandledRejection', (reason) => {
+    logger.error('unhandled promise rejection', { err: reason instanceof Error ? reason : new Error(String(reason)) });
+  });
+  process.on('uncaughtException', (err) => {
+    logger.error('uncaught exception, shutting down', { err });
+    process.exit(1);
+  });
+
   app.listen(env.port, () => {
-    console.log(`MedBrief API listening on port ${env.port}`);
+    logger.info(`MedBrief API listening on port ${env.port}`, {
+      env: process.env.NODE_ENV || 'development',
+      ocrServiceUrl: env.ocrServiceUrl,
+      clientAppUrl: env.clientAppUrl,
+    });
   });
 }
 

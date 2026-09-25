@@ -2,6 +2,7 @@ const crypto = require('crypto');
 const nodemailer = require('nodemailer');
 const supabaseAdmin = require('../config/supabaseAdminClient');
 const env = require('../config/env');
+const log = require('../utils/logger').child({ scope: 'invite' });
 
 const transporter = nodemailer.createTransport({
   host: env.smtp.host,
@@ -34,6 +35,7 @@ async function createAndSendInvite({ appointmentId, patientEmail, patientFullNam
     .single();
 
   if (error) {
+    log.error(`invite insert failed: ${error.message}`, { appointmentId });
     throw new Error(`Failed to create invite: ${error.message}`);
   }
 
@@ -51,9 +53,14 @@ async function createAndSendInvite({ appointmentId, patientEmail, patientFullNam
         <p>This link expires in ${env.inviteTokenTtlHours} hours.</p>
       `,
     });
+    log.info('invite email sent', { appointmentId, inviteId: invite.id });
   } catch (emailErr) {
-    console.warn('[Invite Email Notice]: Could not send email via SMTP, but invite token was generated successfully:', emailErr.message);
-    console.warn('=> Test Invite Link:', inviteLink);
+    log.warn('could not send invite email via SMTP; invite token was still created', {
+      appointmentId,
+      error: emailErr.message,
+    });
+    // The link embeds the invite secret, so it only shows at debug level.
+    log.debug(`invite link (share manually): ${inviteLink}`, { appointmentId });
   }
 
   // The link is returned so the clinician UI can show and copy it. SMTP is

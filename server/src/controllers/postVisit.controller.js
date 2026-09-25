@@ -152,6 +152,13 @@ async function getPostVisitSummary(req, res, next) {
     const access = await assertAppointmentAccess(appointmentId, req.user);
     if (!access.ok) return res.status(access.status).json({ error: access.error });
 
+    // The summary is the clinician's to publish: a patient sees it once the
+    // clinician ends the visit, not half-written notes mid-consultation.
+    const published = access.appointment.status === 'completed';
+    if (req.user.role !== 'clinician' && !published) {
+      return res.json({ published: false, notes: null, prescriptions: [], actionItems: [], consultationChecklist: [] });
+    }
+
     const [notesResult, prescriptionsResult, actionItemsResult, consultationResult] = await Promise.all([
       supabaseAdmin.from('consultation_notes').select('*').eq('appointment_id', appointmentId).maybeSingle(),
       supabaseAdmin.from('prescriptions').select('*').eq('appointment_id', appointmentId),
@@ -180,6 +187,7 @@ async function getPostVisitSummary(req, res, next) {
     );
 
     res.json({
+      published,
       notes: notesResult.data,
       prescriptions,
       actionItems: actionItemsResult.data || [],

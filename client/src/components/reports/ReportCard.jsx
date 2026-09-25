@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { FileType, CheckCircle, AlertCircle, Trash2, Share2, ExternalLink } from 'lucide-react';
+import { FileType, CheckCircle, AlertCircle, Trash2, Share2, ExternalLink, ScanText } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 import { Card } from '../ui/Card';
 import { Checkbox } from '../ui/Checkbox';
+import OcrPreviewModal from './OcrPreviewModal';
 import { cn } from '../../utils/cn';
 
 /** Maps the report's ocr_status onto what the patient needs to know. */
@@ -31,6 +32,7 @@ function statusDisplay(ocrStatus, metricCount) {
 
 export default function ReportCard({ report, appointments = [], onRemove, onToggleShare }) {
   const [sharingOpen, setSharingOpen] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   const metrics = report.lab_report_metrics ?? [];
   const status = statusDisplay(report.ocr_status, metrics.length);
@@ -85,6 +87,14 @@ export default function ReportCard({ report, appointments = [], onRemove, onTogg
         </div>
 
         <div className="flex items-center gap-1 shrink-0">
+          <button
+            onClick={() => setPreviewOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-primary hover:bg-primary-light rounded-full transition-colors"
+            aria-label="Preview what was read from this report"
+          >
+            <ScanText size={16} />
+            <span className="hidden sm:inline">Preview</span>
+          </button>
           {report.signed_url && (
             <a
               href={report.signed_url}
@@ -150,6 +160,7 @@ export default function ReportCard({ report, appointments = [], onRemove, onTogg
           )}
         </div>
       )}
+      <OcrPreviewModal report={report} isOpen={previewOpen} onClose={() => setPreviewOpen(false)} />
     </Card>
   );
 }

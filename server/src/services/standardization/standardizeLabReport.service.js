@@ -84,8 +84,9 @@ function buildTokenSortIndex(dictionary) {
   return index;
 }
 
-function findDictionaryEntry(dictionary, rawKey, tokenSortIndex) {
+function matchSpelling(dictionary, rawKey, tokenSortIndex) {
   const normalizedRaw = normalizeKey(rawKey);
+  if (!normalizedRaw) return undefined;
 
   const exact = dictionary.find((entry) => {
     if (normalizeKey(entry.standard_key) === normalizedRaw) return true;
@@ -97,6 +98,60 @@ function findDictionaryEntry(dictionary, rawKey, tokenSortIndex) {
   // Fall back to an order-insensitive match before giving up.
   const standardKey = tokenSortIndex?.get(tokenSortKey(rawKey));
   return standardKey ? dictionary.find((entry) => entry.standard_key === standardKey) : undefined;
+}
+
+/**
+ * Bracketed words that describe how or where a test was run, never which
+ * analyte it is — so "CRP (Quantitative)" may fall back to "CRP". Anything
+ * else in brackets ("Direct", "Free", "Fasting") changes the analyte and is
+ * never dropped.
+ */
+const METHOD_QUALIFIER = new RegExp(
+  '^(' +
+    [
+      'quantitative', 'qualitative', 'calculated', 'calc', 'derived', 'computed', 'automated',
+      'serum', 'plasma', 'whole blood', 'blood', 'edta', 'venous', 'capillary',
+      'wintrobe', 'westergren', 'modified westergren',
+      'clia', 'eclia', 'cmia', 'elisa', 'elfa', 'hplc', 'ise', 'ise indirect', 'ise direct',
+      'enzymatic', 'kinetic', 'colorimetric', 'photometric', 'photometry', 'spectrophotometry',
+      'immunoturbidimetry', 'immunoturbidimetric', 'turbidimetric', 'nephelometry',
+      'jaffe', 'ifcc', 'biuret', 'bcg', 'bromocresol green', 'diazo', 'uricase', 'urease',
+      'hexokinase', 'god pod', 'god-pod', 'gpo', 'chod pod', 'chod-pod', 'glucose oxidase',
+      'impedance', 'electrical impedance', 'flow cytometry', 'microscopy', 'dipstick',
+      '3rd generation', 'third generation',
+    ].join('|') +
+    ')$',
+  'i'
+);
+
+/**
+ * The dictionary entry for a printed test name, or undefined.
+ *
+ * Tries the name as printed first. Labs often add a bracket — an
+ * abbreviation ("Hematocrit (HCT)", "Mean Cell Hb Concentration (MCHC)") or
+ * a method ("ESR (Wintrobe)") — so it then tries each bracketed abbreviation
+ * on its own, and finally the name without a method-only bracket.
+ */
+function findDictionaryEntry(dictionary, rawKey, tokenSortIndex) {
+  const printed = String(rawKey ?? '');
+  const direct = matchSpelling(dictionary, printed, tokenSortIndex);
+  if (direct) return direct;
+
+  const brackets = [...printed.matchAll(/[(\[]([^)\]]*)[)\]]/g)].map((m) => m[1].trim());
+  if (brackets.length === 0) return undefined;
+  const outside = printed.replace(/[(\[][^)\]]*[)\]]/g, ' ').replace(/\s+/g, ' ').trim();
+
+  for (const inner of brackets) {
+    if (!inner || METHOD_QUALIFIER.test(inner)) continue;
+    const byAbbreviation = matchSpelling(dictionary, inner, tokenSortIndex);
+    if (byAbbreviation) return byAbbreviation;
+  }
+
+  if (outside && brackets.every((inner) => !inner || METHOD_QUALIFIER.test(inner))) {
+    return matchSpelling(dictionary, outside, tokenSortIndex);
+  }
+
+  return undefined;
 }
 
 /**
@@ -128,6 +183,38 @@ function parseNumericValue(value) {
   return { value: Number(text), inexact };
 }
 
+/**
+ * Results that are words, not numbers: dipstick grades, colours, microscopy
+ * counts. They are genuine readings — "Negative" is the answer, not a failed
+ * parse — so they are stored as printed and not sent to manual review.
+ */
+const QUALITATIVE_RESULT = new RegExp(
+  '^(' +
+    [
+      'negative', 'positive', 'nil', 'absent', 'present', 'trace', 'normal', 'abnormal',
+      'not detected', 'detected', 'non[- ]?reactive', 'reactive', 'not seen', 'seen',
+      '[1-4]\\+', '\\+{1,4}', // dipstick grades: "2+", "++"
+      '(pale |light |dark |deep )?(yellow|straw|amber|red|brown|orange)( yellow)?', 'colou?rless',
+      'clear', 'slightly (turbid|hazy|cloudy)', 'turbid', 'hazy', 'cloudy',
+      'acidic', 'alkaline', 'neutral',
+      'occasional', 'rare', 'few', 'moderate', 'many', 'plenty', 'numerous',
+    ].join('|') +
+    ')$',
+  'i'
+);
+
+/** A result printed as a range: "2-4" pus cells per hpf, "0.00-20.00". */
+const RANGE_RESULT = /^\d+(\.\d+)?\s*[-–]\s*\d+(\.\d+)?$/;
+
+function isQualitativeResult(value, entry) {
+  if (typeof value !== 'string') return false;
+  const text = value.trim().replace(/\s+/g, ' ');
+  if (QUALITATIVE_RESULT.test(text)) return true;
+  // Ranges are shown as printed rather than sent to review; the clinician
+  // reads them in the grid next to the scan.
+  return RANGE_RESULT.test(text);
+}
+
 async function standardizeMetrics(rawMetrics) {
   const dictionary = await loadDictionary();
 
@@ -135,7 +222,14 @@ async function standardizeMetrics(rawMetrics) {
     const entry = findDictionaryEntry(dictionary, metric.key, tokenSortIndexCache);
     const { value: numericValue, inexact } = parseNumericValue(metric.value);
     const hasNumericValue = !Number.isNaN(numericValue);
+    const qualitative = !hasNumericValue && isQualitativeResult(metric.value, entry);
+    const unreadable = !hasNumericValue && !qualitative;
+    const belowConfidenceThreshold =
+      typeof metric.confidence === 'number' && metric.confidence < env.ocrMetricReviewThreshold;
 
+    // A test the dictionary does not know is still a confident reading; it is
+    // kept under its printed name and only flagged when the value itself is
+    // doubtful (unreadable, a bound like "<0.5", or low OCR confidence).
     if (!entry) {
       return {
         raw_key: metric.key,
@@ -145,19 +239,18 @@ async function standardizeMetrics(rawMetrics) {
         unit_raw: metric.unit || null,
         unit_standard: null,
         confidence_score: metric.confidence ?? null,
-        needs_review: true,
+        needs_review: unreadable || inexact || belowConfidenceThreshold,
       };
     }
 
     const conversion = hasNumericValue
-      ? convertUnit(numericValue, metric.unit, entry.unit_standard)
+      ? convertUnit(numericValue, metric.unit, entry.unit_standard, entry.standard_key)
       : { value: null, converted: false };
 
-    const unitConversionFailed = Boolean(metric.unit) && conversion.converted === false;
-    const belowConfidenceThreshold =
-      typeof metric.confidence === 'number' && metric.confidence < env.ocrMetricReviewThreshold;
+    // Only a number can fail to convert; a range or word result keeps its printed unit.
+    const unitConversionFailed = hasNumericValue && Boolean(metric.unit) && conversion.converted === false;
 
-    const needsReview = !hasNumericValue || inexact || unitConversionFailed || belowConfidenceThreshold;
+    const needsReview = unreadable || inexact || unitConversionFailed || belowConfidenceThreshold;
 
     return {
       raw_key: metric.key,

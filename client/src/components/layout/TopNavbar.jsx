@@ -3,6 +3,7 @@ import { Home, FileText, ClipboardList, User } from 'lucide-react';
 import { cn } from '../../utils/cn';
 import { usePatientContext } from '../../context/PatientContext';
 import { useAuth } from '../../hooks/useAuth';
+import { ThemeToggle } from '../common/ThemeToggle.jsx';
 
 export default function TopNavbar() {
   const { activeAppointment, profile } = usePatientContext();
@@ -11,7 +12,7 @@ export default function TopNavbar() {
   
   const handleLogout = async () => {
     await logout();
-    navigate('/login');
+    navigate('/login', { replace: true });
   };
   
   // Nudge the patient while a selected visit still needs checking in.
@@ -28,15 +29,13 @@ export default function TopNavbar() {
   ];
 
   return (
-    <nav className="w-full bg-white border-b border-ink-soft/10 shadow-sm sticky top-0 z-40">
+    <nav className="w-full bg-raised border-b border-ink-soft/10 shadow-sm sticky top-0 z-40">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
           
           {/* Logo / Brand */}
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center text-white font-bold">
-              M
-            </div>
+            <img src="/logo-mark.png" alt="MedBrief" className="w-9 h-9 object-contain" />
             <span className="font-bold text-xl text-ink hidden sm:block">MedBrief</span>
           </div>
 
@@ -68,6 +67,7 @@ export default function TopNavbar() {
 
           {/* User Profile */}
           <div className="flex items-center gap-3 relative group">
+            <ThemeToggle />
             <div className="text-right hidden sm:block">
               <p className="text-sm font-bold text-ink leading-tight">{profile?.fullName}</p>
               <p className="text-xs text-ink-soft">Patient Portal</p>
@@ -77,7 +77,7 @@ export default function TopNavbar() {
             </div>
             
             {/* Dropdown */}
-            <div className="absolute right-0 top-12 mt-2 w-48 bg-white rounded-card shadow-card border border-ink-soft/10 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
+            <div className="absolute right-0 top-12 mt-2 w-48 bg-raised rounded-card shadow-card border border-ink-soft/10 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
               <div className="py-2">
                 <NavLink to="/profile" className="block px-4 py-2 text-sm text-ink font-medium hover:bg-canvas transition-colors">
                   Personal Details

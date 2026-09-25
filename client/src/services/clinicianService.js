@@ -1,4 +1,5 @@
 import { request, upload } from './apiClient.js';
+import { buildFlowsheet, reviewReason } from '../utils/flowsheet.js';
 
 /** Create an appointment, attach its questionnaire and invite the patient. */
 export async function createAppointment({
@@ -93,6 +94,13 @@ export async function fetchPatientDashboard(patientId, appointmentId) {
     getTemplates('action'),
   ]);
 
+  // Every report shared with any of this doctor's visits, for the history
+  // grid. Falls back to this visit's reports if the patient isn't linked yet
+  // or the history call fails — the grid then just has one column.
+  const history = patientId
+    ? await request(`/api/lab-reports/history?patientId=${patientId}`).catch(() => reports)
+    : reports;
+
   return {
     patient: buildPatient(appointment, patientId),
     appointment,
@@ -113,6 +121,9 @@ export async function fetchPatientDashboard(patientId, appointmentId) {
       }),
     },
     metrics: buildMetrics(reports),
+    // Kept so a resolved value can rebuild the grid without a refetch.
+    historyReports: history,
+    flowsheet: buildFlowsheet(history, appointmentId),
     triageAlerts: buildTriageAlerts(reports),
     notes: { text: postVisit?.notes?.notes_text ?? '', updatedAt: postVisit?.notes?.updated_at ?? null },
     // What the clinician ticked during this consultation.
@@ -168,6 +179,15 @@ export async function uploadPrescription(appointmentId, file, typedInstructions 
 }
 
 /** Doctor types in a value the OCR pipeline could not read confidently. */
+/**
+ * End the consultation. Marking the visit completed is what publishes the
+ * notes, consultation items, next steps and prescriptions to the patient's
+ * visit summary.
+ */
+export async function endVisit(appointmentId) {
+  return request(`/api/appointments/${appointmentId}/status`, { method: 'PATCH', body: { status: 'completed' } });
+}
+
 export async function resolveTriageAlert(metricId, { standardKey, reviewedValue }) {
   return request(`/api/lab-reports/metrics/${metricId}/review`, {
     method: 'PATCH',
@@ -219,17 +239,23 @@ function buildPatient(appointment, patientId) {
   };
 }
 
-/** Latest value per standard_key, with the full series attached for charting. */
+/**
+ * Latest value per standard_key, with the full series attached for charting.
+ * Tests the dictionary does not know are grouped by their printed name, so a
+ * confident reading is never dropped just because it went unmatched.
+ */
 function buildMetrics(reports = []) {
   const byKey = new Map();
 
   for (const report of reports) {
     for (const metric of report.lab_report_metrics ?? []) {
-      if (!metric.standard_key) continue;
+      const key = metric.standard_key ?? `raw:${(metric.raw_key ?? '').trim().toLowerCase()}`;
 
       const value = metric.reviewed_value ?? metric.parsed_value;
-      const entry = byKey.get(metric.standard_key) ?? {
-        standardKey: metric.standard_key,
+      const entry = byKey.get(key) ?? {
+        key,
+        // Only dictionary metrics have a server-side trend to fetch.
+        standardKey: metric.standard_key ?? null,
         name: metric.metric_dictionary?.display_name ?? metric.raw_key,
         source: report.source_name ?? 'Lab report',
         unit: metric.unit_standard ?? metric.unit_raw ?? '',
@@ -238,21 +264,27 @@ function buildMetrics(reports = []) {
       };
 
       if (metric.needs_review) entry.needsReview = true;
+      // Qualitative results ("Negative", "Trace") have no number; show them as printed.
+      const takenAt = new Date(report.report_date ?? report.uploaded_at);
+      if (!entry.printedAt || takenAt >= entry.printedAt) {
+        entry.printedAt = takenAt;
+        entry.printed = metric.raw_value ?? null;
+      }
       // An unreadable value stays out of the series rather than charting as 0.
       if (value != null) {
         entry.history.push({ date: report.report_date ?? report.uploaded_at, value: Number(value) });
       }
-      byKey.set(metric.standard_key, entry);
+      byKey.set(key, entry);
     }
   }
 
-  return [...byKey.values()].map((entry) => {
+  return [...byKey.values()].map(({ printed, printedAt, ...entry }) => {
     entry.history.sort((a, b) => new Date(a.date) - new Date(b.date));
     const latest = entry.history.at(-1);
     return {
       ...entry,
-      value: latest?.value != null ? String(latest.value) : null,
-      recordedAt: latest?.date ?? null,
+      value: latest?.value != null ? String(latest.value) : printed,
+      recordedAt: latest?.date ?? printedAt?.toISOString() ?? null,
     };
   });
 }
@@ -267,13 +299,13 @@ function buildTriageAlerts(reports = []) {
         labReportId: report.id,
         metricId: metric.id,
         standardKey: metric.standard_key ?? '',
+        // Same grouping key buildMetrics uses, so resolving updates the right row.
+        metricKey: metric.standard_key ?? `raw:${(metric.raw_key ?? '').trim().toLowerCase()}`,
         label: metric.metric_dictionary?.display_name ?? metric.raw_key,
         reportName: report.source_name ?? 'Uploaded lab report',
         reportDate: report.report_date ?? report.uploaded_at,
         confidence: metric.confidence_score ?? null,
-        reason: metric.standard_key
-          ? 'Value could not be read confidently.'
-          : 'Parameter name did not match the metric dictionary.',
+        reason: reviewReason(metric),
         imageUrl: report.signed_url ?? null,
       }))
   );
