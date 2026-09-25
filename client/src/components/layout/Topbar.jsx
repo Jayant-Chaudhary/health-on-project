@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Icon } from '../common/Icon.jsx';
 import { Avatar } from '../common/Avatar.jsx';
 import { ThemeToggle } from '../common/ThemeToggle.jsx';
@@ -144,13 +145,17 @@ export function Topbar({ patients = [], onSelectPatient, notifications = [] }) {
         )}
       </div>
 
-      <div className="hidden shrink-0 items-center gap-2.5 pl-1 xl:flex">
+      <Link
+        to="/clinician/profile"
+        title="Your profile"
+        className="flex shrink-0 items-center gap-2.5 rounded-xl p-1 pl-1 transition-colors hover:bg-subcanvas"
+      >
         <Avatar name={clinicianName} size="sm" tone="cypress" />
-        <div className="leading-tight">
+        <div className="hidden leading-tight xl:block">
           <p className="font-display text-label-md text-ink">{clinicianName}</p>
           <p className="text-body-sm text-ink-3">{clinicianRole}</p>
         </div>
-      </div>
+      </Link>
     </header>
   );
 }
