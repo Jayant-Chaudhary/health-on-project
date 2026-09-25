@@ -9,10 +9,11 @@ export default {
       colors: {
         primary:   { DEFAULT: '#2F6F6B', dark: '#245A57', light: '#E4F0EF' }, // deep teal
         accent:    { DEFAULT: '#F2836B', dark: '#E06D54', light: '#FDECE8' }, // warm coral
-        canvas:    '#FBF8F5',   // page background
+        canvas:    { DEFAULT: '#FBF8F5', alt: '#F3EEE8' },   // page background, recessed panels
         ink:       { DEFAULT: '#1F2933', soft: '#6B7280' },
-        success:   { DEFAULT: '#4CAF7D', light: '#E6F5EC' },
-        attention: { DEFAULT: '#F5B041', light: '#FEF3DD' }, // amber, NEVER red
+        success:   { DEFAULT: '#4CAF7D', light: '#E6F5EC', dark: '#2F7A55' },
+        attention: { DEFAULT: '#F5B041', light: '#FEF3DD', dark: '#A8650F' }, // amber, NEVER red
+        danger:    { DEFAULT: '#B4654A' }, // form errors — the terracotta, not a clinical red
         
         // Clinician palette
         subcanvas: '#FAF5EE',
@@ -24,7 +25,16 @@ export default {
         'ink-3': '#91877E',
         cypress: { DEFAULT: '#2C4035', deep: '#213028', soft: '#4E6554' },
         sage: { DEFAULT: '#607A68', surface: '#EEF4F0', border: '#CFDFD4', ink: '#4E6554' },
-        terracotta: { DEFAULT: '#B4654A', surface: '#FDF2EE', border: '#F4D3C7', deep: '#9E543B' },
+        terracotta: {
+          DEFAULT: '#B4654A', surface: '#FDF2EE', border: '#F4D3C7', deep: '#9E543B',
+          50: '#FDF2EE', 200: '#F4D3C7', 600: '#9E543B',
+        },
+        // Numeric scale of the cypress greens, for screens written against one.
+        pine: {
+          50: '#F3F7F4', 100: '#E4ECE7', 200: '#CFDFD4', 300: '#AFC5B6', 400: '#86A290',
+          500: '#607A68', 600: '#4E6554', 700: '#3B5244', 800: '#2C4035', 900: '#213028',
+        },
+        sand: { 100: '#F5EFE3', 800: '#6B5A3E' },
         rose: { DEFAULT: '#C48A96', surface: '#FBF1F3', border: '#EFCFD5' },
         olive: { DEFAULT: '#857A68', surface: '#F5F2EC', border: '#E6DFD1' },
       },

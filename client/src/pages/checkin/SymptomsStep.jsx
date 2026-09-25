@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { checkinService } from '../../services/checkinService';
 import { usePatientContext } from '../../context/PatientContext';
 import { useToast } from '../../context/ToastContext';
@@ -13,21 +13,43 @@ export default function SymptomsStep() {
   const [answers, setAnswers] = useState({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const { activeAppointment } = usePatientContext();
+  const { activeAppointment, loading: contextLoading } = usePatientContext();
   const { showToast } = useToast();
   const navigate = useNavigate();
-  const { appointment } = usePatientContext();
+
+  const appointmentId = activeAppointment?.id;
 
   useEffect(() => {
-    async function load() {
-      if (appointment) {
-        const q = await checkinService.getQuestions(appointment.id);
-        setQuestions(q);
-        setLoading(false);
-      }
+    if (contextLoading) return undefined;
+    if (!appointmentId) {
+      setLoading(false);
+      return undefined;
     }
-    load();
-  }, [appointment]);
+
+    let cancelled = false;
+    setLoading(true);
+
+    Promise.all([checkinService.getQuestions(appointmentId), checkinService.getAnswers(appointmentId)])
+      .then(([questionRows, answerRows]) => {
+        if (cancelled) return;
+        setQuestions(questionRows);
+        // Coming back to this step shows what was already submitted.
+        setAnswers(
+          Object.fromEntries(
+            answerRows.map((row) => [
+              row.template_id,
+              { value: row.answer ? 'yes' : 'no', notes: row.detail ?? '' },
+            ])
+          )
+        );
+      })
+      .catch((err) => !cancelled && showToast(err.message || 'Could not load the questionnaire.', 'error'))
+      .finally(() => !cancelled && setLoading(false));
+
+    return () => {
+      cancelled = true;
+    };
+  }, [appointmentId, contextLoading, showToast]);
 
   const handleToggle = (questionId, value) => {
     setAnswers(prev => ({
@@ -44,21 +66,9 @@ export default function SymptomsStep() {
   };
 
   const handleNext = async () => {
-    if (!activeAppointment) {
-      showToast('Select an appointment on your dashboard first.', 'error');
-      return;
-    }
-
     setSaving(true);
     try {
-      // The API stores one boolean per question, keyed by template id.
-      const booleanAnswers = Object.fromEntries(
-        Object.entries(answers)
-          .filter(([, a]) => a?.value === 'yes' || a?.value === 'no')
-          .map(([id, a]) => [id, a.value === 'yes'])
-      );
-
-      await checkinService.saveAnswers(activeAppointment.id, booleanAnswers);
+      await checkinService.saveAnswers(appointmentId, answers);
       navigate('/checkin/checklist');
     } catch (err) {
       showToast(err.message || 'Could not save your answers.', 'error');
@@ -69,12 +79,24 @@ export default function SymptomsStep() {
 
   const allAnswered = questions.length > 0 && questions.every(q => answers[q.id]?.value !== undefined);
 
-  if (loading) {
+  if (loading || contextLoading) {
     return (
       <div className="space-y-6">
         <Skeleton className="h-40 w-full rounded-card" />
         <Skeleton className="h-40 w-full rounded-card" />
       </div>
+    );
+  }
+
+  if (!appointmentId) {
+    return (
+      <Card className="p-8 text-center">
+        <h2 className="font-bold text-lg text-ink mb-2">No appointment selected</h2>
+        <p className="text-ink-soft mb-4">Choose the visit you are checking in for on your dashboard.</p>
+        <Link to="/" className="text-primary font-bold hover:underline">
+          Go to dashboard
+        </Link>
+      </Card>
     );
   }
 
@@ -91,11 +113,11 @@ export default function SymptomsStep() {
           return (
             <Card key={q.id} className="p-5">
               <h3 className="font-bold text-lg text-ink mb-4 leading-tight">{q.question_text}</h3>
-              
+
               <div className="mb-4">
-                <YesNoToggle 
-                  value={ans?.value} 
-                  onChange={(val) => handleToggle(q.id, val)} 
+                <YesNoToggle
+                  value={ans?.value}
+                  onChange={(val) => handleToggle(q.id, val)}
                 />
               </div>
 
@@ -119,10 +141,10 @@ export default function SymptomsStep() {
 
       {/* Sticky footer for action button */}
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-ink-soft/10 p-4 z-40 max-w-3xl mx-auto">
-        <Button 
-          className="w-full" 
+        <Button
+          className="w-full"
           onClick={handleNext}
-          disabled={!allAnswered}
+          disabled={!allAnswered || saving}
         >
           {saving ? 'Saving…' : allAnswered ? 'Continue to Next Step' : 'Please answer all questions'}
         </Button>

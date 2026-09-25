@@ -16,19 +16,16 @@ import CheckinDonePage from '../pages/checkin/CheckinDonePage';
 // Auth Pages
 import LoginPage from '../pages/auth/LoginPage';
 import SignupPage from '../pages/auth/SignupPage';
-import InvitePage from '../pages/auth/InvitePage';
+import InvitePage from '../pages/invite/InvitePage.jsx';
 
 // Clinician Pages
 import { ClinicianDashboard } from '../pages/clinician/ClinicianDashboard.jsx';
-import { ClinicianSchedule } from '../pages/clinician/ClinicianSchedule.jsx';
 import { ComingSoon } from '../pages/clinician/ComingSoon.jsx';
 import VerificationPending from '../pages/clinician/VerificationPending.jsx';
-import { ClinicianProfile } from '../pages/clinician/ClinicianProfile.jsx';
-
-// Onboarding Pages
-import InvitePage from '../pages/invite/InvitePage.jsx';
 import ClinicianProfile from '../pages/clinician/ClinicianProfile.jsx';
 import NewAppointment from '../pages/clinician/NewAppointment.jsx';
+
+// Onboarding Pages
 import PatientOnboarding from '../pages/onboarding/PatientOnboarding.jsx';
 import ClinicianOnboarding from '../pages/onboarding/ClinicianOnboarding.jsx';
 
@@ -70,7 +67,6 @@ export function AppRoutes() {
       <Route path="/clinician/patients" element={<ProtectedRoute requireVerifiedClinician><ComingSoon title="Patients" icon="users" /></ProtectedRoute>} />
       <Route path="/clinician/lab-inbox" element={<ProtectedRoute requireVerifiedClinician><ComingSoon title="Lab Inbox" icon="flask" /></ProtectedRoute>} />
       <Route path="/clinician/analytics" element={<ProtectedRoute requireVerifiedClinician><ComingSoon title="Analytics" icon="chart" /></ProtectedRoute>} />
-      <Route path="/clinician/profile" element={<ProtectedRoute requireVerifiedClinician><ClinicianProfile /></ProtectedRoute>} />
       
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

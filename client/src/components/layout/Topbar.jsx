@@ -80,7 +80,7 @@ export function Topbar({ patients = [], onSelectPatient, notifications = [], cli
               <li className="px-4 py-3 text-body-sm text-ink-3">No patient matches “{query}”.</li>
             )}
             {results.map((patient) => (
-              <li key={patient.id}>
+              <li key={patient.appointmentId ?? patient.id}>
                 <button
                   type="button"
                   onClick={() => select(patient)}

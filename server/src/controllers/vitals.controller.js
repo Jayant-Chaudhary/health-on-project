@@ -1,8 +1,14 @@
 const supabaseAdmin = require('../config/supabaseAdminClient');
+const { assertAppointmentAccess, resolvePatientScope } = require('../services/access.service');
 
 async function logVital(req, res, next) {
   try {
     const { appointmentId, metricKey, value, unit } = req.validated;
+
+    if (appointmentId) {
+      const access = await assertAppointmentAccess(appointmentId, req.user);
+      if (!access.ok) return res.status(access.status).json({ error: access.error });
+    }
 
     const { data, error } = await supabaseAdmin
       .from('vitals_logs')
@@ -26,11 +32,9 @@ async function logVital(req, res, next) {
 
 async function listVitals(req, res, next) {
   try {
-    const patientId = req.user.role === 'clinician' ? req.query.patientId : req.user.id;
-
-    if (!patientId) {
-      return res.status(400).json({ error: 'patientId is required' });
-    }
+    const scope = await resolvePatientScope(req);
+    if (!scope.ok) return res.status(scope.status).json({ error: scope.error });
+    const { patientId } = scope;
 
     const { data, error } = await supabaseAdmin
       .from('vitals_logs')

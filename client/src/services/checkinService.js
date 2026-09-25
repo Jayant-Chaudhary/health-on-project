@@ -2,21 +2,25 @@ import { request } from './apiClient';
 
 export const checkinService = {
   /**
-   * The active questionnaire. The API returns a flat list of question rows
-   * ordered by sort_order — each row is its own template, not a container.
+   * The questions for one appointment — the ones its clinician chose, or the
+   * clinic's default set. Each row is its own template, ordered by sort_order.
    */
-  async getQuestions() {
-    return (await request('/api/questionnaire/templates')) ?? [];
+  async getQuestions(appointmentId) {
+    if (!appointmentId) return [];
+    return (await request(`/api/questionnaire/appointment/${appointmentId}`)) ?? [];
   },
 
   /**
-   * `answers` maps a template id to a boolean, which is the shape the API
-   * stores: one row per question, answered yes or no.
+   * `answers` maps a template id to `{ value: 'yes' | 'no', notes }`. The API
+   * stores one row per question: the yes/no, plus any detail given with a yes.
    */
   async saveAnswers(appointmentId, answers) {
     const responses = Object.entries(answers)
-      .filter(([, value]) => typeof value === 'boolean')
-      .map(([templateId, answer]) => ({ templateId, answer }));
+      .filter(([, a]) => a?.value === 'yes' || a?.value === 'no')
+      .map(([templateId, a]) => {
+        const detail = a.value === 'yes' ? a.notes?.trim() : '';
+        return { templateId, answer: a.value === 'yes', ...(detail ? { detail } : {}) };
+      });
 
     if (!appointmentId || responses.length === 0) return null;
 
@@ -43,12 +47,4 @@ export const checkinService = {
     });
   },
 
-  /** Marks the patient as checked in for the visit. */
-  async submitCheckin(appointmentId) {
-    if (!appointmentId) return null;
-    return request(`/api/appointments/${appointmentId}/status`, {
-      method: 'PATCH',
-      body: { status: 'checked_in' },
-    });
-  },
 };

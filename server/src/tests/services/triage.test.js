@@ -1,9 +1,5 @@
 jest.mock('../../config/supabaseAdminClient', () => ({
-  from: jest.fn().mockReturnThis(),
-  select: jest.fn().mockReturnThis(),
-  eq: jest.fn().mockReturnThis(),
-  is: jest.fn().mockReturnThis(),
-  order: jest.fn().mockResolvedValue({ data: [], error: null }),
+  from: jest.fn(),
 }));
 
 jest.mock('../../services/checklist.service', () => ({
@@ -13,6 +9,7 @@ jest.mock('../../services/checklist.service', () => ({
 const supabaseAdmin = require('../../config/supabaseAdminClient');
 const { maybeFlagReportForTriage, getTriageQueue } = require('../../services/triage.service');
 const { addAiGeneratedChecklistItem } = require('../../services/checklist.service');
+const { ok, fail, mockTables } = require('../helpers/supabaseMock');
 
 describe('Triage Service', () => {
   beforeEach(() => {
@@ -68,21 +65,41 @@ describe('Triage Service', () => {
   });
 
   describe('getTriageQueue()', () => {
-    it('should return the triage queue successfully', async () => {
+    it("should return unreviewed metrics from reports shared with the clinician's visits", async () => {
       const mockQueue = [{ id: 'metric-1' }];
-      supabaseAdmin.order.mockResolvedValue({ data: mockQueue, error: null });
+      const chains = mockTables(supabaseAdmin, {
+        appointments: ok([{ id: 'appt-1' }, { id: 'appt-2' }]),
+        appointment_lab_reports: ok([{ lab_report_id: 'report-1' }, { lab_report_id: 'report-1' }]),
+        lab_report_metrics: ok(mockQueue),
+      });
 
-      const result = await getTriageQueue();
+      const result = await getTriageQueue('clinician-1');
+
       expect(result).toEqual(mockQueue);
-      expect(supabaseAdmin.from).toHaveBeenCalledWith('lab_report_metrics');
-      expect(supabaseAdmin.eq).toHaveBeenCalledWith('needs_review', true);
-      expect(supabaseAdmin.is).toHaveBeenCalledWith('reviewed_by', null);
+      expect(chains.appointments[0].eq).toHaveBeenCalledWith('clinician_id', 'clinician-1');
+      const metrics = chains.lab_report_metrics[0];
+      expect(metrics.eq).toHaveBeenCalledWith('needs_review', true);
+      expect(metrics.is).toHaveBeenCalledWith('reviewed_by', null);
+      expect(metrics.in).toHaveBeenCalledWith('lab_report_id', ['report-1']);
+    });
+
+    it('should return an empty queue when nothing is shared with the clinician', async () => {
+      mockTables(supabaseAdmin, {
+        appointments: ok([{ id: 'appt-1' }]),
+        appointment_lab_reports: ok([]),
+      });
+
+      await expect(getTriageQueue('clinician-1')).resolves.toEqual([]);
     });
 
     it('should throw an error if database query fails', async () => {
-      supabaseAdmin.order.mockResolvedValue({ data: null, error: { message: 'DB Error' } });
+      mockTables(supabaseAdmin, {
+        appointments: ok([{ id: 'appt-1' }]),
+        appointment_lab_reports: ok([{ lab_report_id: 'report-1' }]),
+        lab_report_metrics: fail('DB Error'),
+      });
 
-      await expect(getTriageQueue()).rejects.toThrow('Failed to load triage queue: DB Error');
+      await expect(getTriageQueue('clinician-1')).rejects.toThrow('Failed to load triage queue: DB Error');
     });
   });
 });

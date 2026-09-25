@@ -15,7 +15,7 @@ import { Plus, ArrowLeft, Clock, User, CheckCircle } from 'lucide-react';
 import {
   fetchPatients,
   saveConsultancyNotes,
-  toggleChecklistItem,
+  toggleActionItem,
   addActionItem,
   resolveTriageAlert,
 } from '../../services/clinicianService.js';
@@ -77,7 +77,7 @@ export function ClinicianDashboard() {
         ),
       }));
       try {
-        await toggleChecklistItem(item.id, isCompleted);
+        await toggleActionItem(item.id, isCompleted);
       } catch {
         patch((current) => ({
           checklist: current.checklist.map((entry) =>
@@ -100,7 +100,10 @@ export function ClinicianDashboard() {
   );
 
   const handleResolveAlert = useCallback(
-    async (alert, value) => {
+    async (alert, rawValue) => {
+      const value = Number(rawValue);
+      if (!Number.isFinite(value)) throw new Error('Enter the reading as a number.');
+
       await resolveTriageAlert(alert.metricId, {
         standardKey: alert.standardKey,
         reviewedValue: value,
@@ -109,7 +112,7 @@ export function ClinicianDashboard() {
         triageAlerts: current.triageAlerts.filter((entry) => entry.id !== alert.id),
         metrics: current.metrics.map((metric) =>
           metric.standardKey === alert.standardKey
-            ? { ...metric, value, status: 'optimal', needsReview: false }
+            ? { ...metric, value: String(value), needsReview: false }
             : metric
         ),
       }));
@@ -134,8 +137,8 @@ export function ClinicianDashboard() {
         <h2 className="text-xl font-display font-semibold text-ink mb-6">Today's Appointments</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {patients.map(patient => {
-            const isPending = patient.id?.startsWith('invite-') || patient.status === 'invited';
-            
+            const isPending = patient.isPending;
+
             return (
               <div 
                 key={patient.appointmentId || patient.id}
@@ -195,8 +198,7 @@ export function ClinicianDashboard() {
         <Topbar
           patients={patients}
           onSelectPatient={(p) => {
-            const isPending = p.id?.startsWith('invite-') || p.status === 'invited';
-            if (!isPending) setSelected(p);
+            if (!p.isPending) setSelected(p);
           }}
           notifications={data?.notifications ?? []}
         />

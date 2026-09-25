@@ -1,6 +1,7 @@
 const request = require('supertest');
 const app = require('../app');
 const supabaseAdmin = require('../config/supabaseAdminClient');
+const { ok, mockTables, profileRow } = require('./helpers/supabaseMock');
 const { standardizeMetrics } = require('../services/standardization/standardizeLabReport.service');
 const { maybeFlagReportForTriage, getTriageQueue } = require('../services/triage.service');
 
@@ -45,6 +46,7 @@ describe('Lab Reports API', () => {
   const mockClinicianProfile = {
     role: 'clinician',
     full_name: 'Dr. Test',
+    clinician_details: { is_verified: true },
   };
 
   const mockToken = 'valid-token';
@@ -170,28 +172,49 @@ describe('Lab Reports API', () => {
       expect(response.body[0]).toMatchObject({ id: 'report-1' });
     });
 
-    it('should list reports for a specific patient if requester is clinician', async () => {
+    it('should list only the reports shared with the clinician\'s appointment', async () => {
       setupAuthMock(mockClinician, mockClinicianProfile);
-      const mockReports = [{ id: 'report-1' }];
-
-      supabaseAdmin.from.mockImplementation((table) => {
-        if (table === 'profiles') return { select: jest.fn().mockReturnThis(), eq: jest.fn().mockReturnThis(), single: jest.fn().mockResolvedValue({ data: mockClinicianProfile, error: null }) };
-        if (table === 'lab_reports') {
-          return {
-            select: jest.fn().mockReturnThis(),
-            eq: jest.fn().mockReturnThis(),
-            order: jest.fn().mockResolvedValue({ data: mockReports, error: null }),
-          };
-        }
+      const chains = mockTables(supabaseAdmin, {
+        profiles: profileRow('clinician'),
+        appointments: ok({ id: 'appt-1', patient_id: 'patient-123', clinician_id: mockClinician.id }),
+        appointment_lab_reports: ok([{ lab_report_id: 'report-1' }]),
+        lab_reports: ok([{ id: 'report-1' }]),
       });
 
       const response = await request(app)
-        .get('/api/lab-reports?patientId=patient-123')
+        .get('/api/lab-reports?appointmentId=appt-1')
         .set('Authorization', `Bearer ${mockToken}`);
 
       expect(response.status).toBe(200);
       expect(response.body).toHaveLength(1);
       expect(response.body[0]).toMatchObject({ id: 'report-1' });
+      expect(chains.lab_reports[0].eq).toHaveBeenCalledWith('patient_id', 'patient-123');
+      expect(chains.lab_reports[0].in).toHaveBeenCalledWith('id', ['report-1']);
+    });
+
+    it('should require an appointment when a clinician lists reports', async () => {
+      setupAuthMock(mockClinician, mockClinicianProfile);
+      mockTables(supabaseAdmin, { profiles: profileRow('clinician') });
+
+      const response = await request(app)
+        .get('/api/lab-reports?patientId=patient-123')
+        .set('Authorization', `Bearer ${mockToken}`);
+
+      expect(response.status).toBe(400);
+    });
+
+    it("should return 403 for another clinician's appointment", async () => {
+      setupAuthMock(mockClinician, mockClinicianProfile);
+      mockTables(supabaseAdmin, {
+        profiles: profileRow('clinician'),
+        appointments: ok({ id: 'appt-1', patient_id: 'patient-123', clinician_id: 'another-dr' }),
+      });
+
+      const response = await request(app)
+        .get('/api/lab-reports?appointmentId=appt-1')
+        .set('Authorization', `Bearer ${mockToken}`);
+
+      expect(response.status).toBe(403);
     });
   });
 
@@ -232,6 +255,7 @@ describe('Lab Reports API', () => {
 
       expect(response.status).toBe(200);
       expect(response.body).toEqual(mockQueue);
+      expect(getTriageQueue).toHaveBeenCalledWith(mockClinician.id);
     });
 
     it('should return 403 if patient tries to access triage queue', async () => {
@@ -246,20 +270,22 @@ describe('Lab Reports API', () => {
   });
 
   describe('PATCH /lab-reports/metrics/:metricId/review', () => {
-    it('should review metric if clinician', async () => {
+    const shareTables = {
+      appointments: ok([{ id: 'appt-1' }]),
+      appointment_lab_reports: ok([{ lab_report_id: 'report-1' }]),
+    };
+
+    it('should review a metric from a report shared with the clinician', async () => {
       setupAuthMock(mockClinician, mockClinicianProfile);
       const mockUpdated = { id: 'metric-1' };
-
-      supabaseAdmin.from.mockImplementation((table) => {
-        if (table === 'profiles') return { select: jest.fn().mockReturnThis(), eq: jest.fn().mockReturnThis(), single: jest.fn().mockResolvedValue({ data: mockClinicianProfile, error: null }) };
-        if (table === 'lab_report_metrics') {
-          return {
-            update: jest.fn().mockReturnThis(),
-            eq: jest.fn().mockReturnThis(),
-            select: jest.fn().mockReturnThis(),
-            single: jest.fn().mockResolvedValue({ data: mockUpdated, error: null }),
-          };
-        }
+      const chains = mockTables(supabaseAdmin, {
+        profiles: profileRow('clinician'),
+        ...shareTables,
+        // The ownership lookup, then the update.
+        lab_report_metrics: [
+          ok({ id: 'metric-1', lab_report_id: 'report-1', lab_reports: { patient_id: 'patient-123' } }),
+          ok(mockUpdated),
+        ],
       });
 
       const response = await request(app)
@@ -269,6 +295,28 @@ describe('Lab Reports API', () => {
 
       expect(response.status).toBe(200);
       expect(response.body).toEqual(mockUpdated);
+      expect(chains.lab_report_metrics[1].update).toHaveBeenCalledWith({
+        standard_key: 'hemoglobin',
+        reviewed_value: 12.5,
+        reviewed_by: mockClinician.id,
+        needs_review: false,
+      });
+    });
+
+    it('should return 403 for a report not shared with the clinician', async () => {
+      setupAuthMock(mockClinician, mockClinicianProfile);
+      mockTables(supabaseAdmin, {
+        profiles: profileRow('clinician'),
+        ...shareTables,
+        lab_report_metrics: ok({ id: 'metric-1', lab_report_id: 'report-other', lab_reports: { patient_id: 'patient-123' } }),
+      });
+
+      const response = await request(app)
+        .patch('/api/lab-reports/metrics/metric-1/review')
+        .set('Authorization', `Bearer ${mockToken}`)
+        .send({ reviewedValue: 12.5 });
+
+      expect(response.status).toBe(403);
     });
   });
 });
