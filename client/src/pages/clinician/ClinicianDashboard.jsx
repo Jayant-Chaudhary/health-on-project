@@ -5,13 +5,15 @@ import { Topbar } from '../../components/layout/Topbar.jsx';
 import { PatientHeaderCard } from '../../components/clinician/PatientHeaderCard.jsx';
 import { PreVisitQuestionnairePanel } from '../../components/clinician/PreVisitQuestionnairePanel.jsx';
 import { OcrTriageAlert } from '../../components/clinician/OcrTriageAlert.jsx';
-import { MetricsTable } from '../../components/clinician/MetricsTable.jsx';
+import { HistoryGrid } from '../../components/clinician/HistoryGrid.jsx';
+import { SlideOver } from '../../components/ui/SlideOver.jsx';
 import { ConsultancyNotes } from '../../components/clinician/ConsultancyNotes.jsx';
 import { ActionChecklist } from '../../components/clinician/ActionChecklist.jsx';
 import { PrescriptionUpload } from '../../components/clinician/PrescriptionUpload.jsx';
 import { Spinner } from '../../components/common/Spinner.jsx';
 import { usePatientDashboard } from '../../hooks/usePatientDashboard.js';
-import { Plus, ArrowLeft, Clock, User, CheckCircle } from 'lucide-react';
+import { Plus, ArrowLeft, Clock, User, CheckCircle, NotebookPen } from 'lucide-react';
+import { buildFlowsheet } from '../../utils/flowsheet.js';
 import {
   fetchPatients,
   saveConsultancyNotes,
@@ -36,6 +38,8 @@ function isToday(value) {
  */
 export function ClinicianDashboard() {
   const [collapsed, setCollapsed] = useState(false);
+  const [notesOpen, setNotesOpen] = useState(false);
+  const closeNotes = useCallback(() => setNotesOpen(false), []);
   const [appointments, setAppointments] = useState([]);
   const [queueError, setQueueError] = useState(null);
   const [queueLoading, setQueueLoading] = useState(true);
@@ -68,7 +72,10 @@ export function ClinicianDashboard() {
   const open = (appointment) => {
     if (!appointment.isPending) setSearchParams({ appointment: appointment.appointmentId });
   };
-  const close = () => setSearchParams({});
+  const close = () => {
+    setNotesOpen(false);
+    setSearchParams({});
+  };
 
   const { data, loading, error, patch } = usePatientDashboard(selected?.id, selected?.appointmentId);
   const appointmentId = data?.appointment?.id;
@@ -142,14 +149,23 @@ export function ClinicianDashboard() {
         ...(alert.standardKey && { standardKey: alert.standardKey }),
         reviewedValue: value,
       });
-      patch((current) => ({
-        triageAlerts: current.triageAlerts.filter((entry) => entry.id !== alert.id),
-        metrics: current.metrics.map((metric) =>
-          metric.key === alert.metricKey
-            ? { ...metric, value: String(value), needsReview: false }
-            : metric
-        ),
-      }));
+      patch((current) => {
+        // The grid is derived from the reports, so update the metric there and rebuild.
+        const historyReports = current.historyReports.map((report) => ({
+          ...report,
+          lab_report_metrics: (report.lab_report_metrics ?? []).map((metric) =>
+            metric.id === alert.metricId ? { ...metric, reviewed_value: value, needs_review: false } : metric
+          ),
+        }));
+        return {
+          triageAlerts: current.triageAlerts.filter((entry) => entry.id !== alert.id),
+          metrics: current.metrics.map((metric) =>
+            metric.key === alert.metricKey ? { ...metric, value: String(value), needsReview: false } : metric
+          ),
+          historyReports,
+          flowsheet: buildFlowsheet(historyReports, current.appointment?.id),
+        };
+      });
     },
     [patch]
   );
@@ -283,42 +299,60 @@ export function ClinicianDashboard() {
             <ArrowLeft className="w-5 h-5 text-ink-soft" />
           </button>
           <h1 className="text-xl font-display font-semibold text-ink">Report Analysis</h1>
+
+          <button
+            type="button"
+            onClick={() => setNotesOpen(true)}
+            aria-haspopup="dialog"
+            aria-expanded={notesOpen}
+            className="ml-auto flex items-center gap-2 rounded-xl border border-line bg-surface px-4 py-2 text-label-lg text-cypress
+                       transition-colors hover:border-cypress hover:bg-subcanvas"
+          >
+            <NotebookPen className="h-4 w-4" />
+            Consultation notes
+            {(data.notes.text.trim() || data.actionItems.length > 0 || data.prescriptions.length > 0) && (
+              <span className="h-2 w-2 rounded-full bg-sage" aria-label="has content" />
+            )}
+          </button>
         </div>
 
         <PatientHeaderCard patient={data.patient} />
         {data.questionnaire.answers.length > 0 && <PreVisitQuestionnairePanel questionnaire={data.questionnaire} />}
 
-        {/* Two work columns, each with its own scroll context. */}
-        <div className="grid min-h-0 flex-1 gap-4 mt-4 lg:grid-cols-[minmax(0,1.55fr)_minmax(340px,1fr)]">
-          <div className="scroll-column min-h-0 space-y-4 pr-1">
-            <OcrTriageAlert alerts={data.triageAlerts} onResolve={handleResolveAlert} />
-            <MetricsTable metrics={data.metrics} patientId={data.patient.id} />
-          </div>
-
-          <div className="scroll-column min-h-0 space-y-4 pr-1">
-            <ConsultancyNotes
-              notes={data.notes}
-              onSave={handleSaveNotes}
-              templates={data.consultationTemplates}
-              checkedItems={data.consultationItems}
-              onCheckItem={handleCheckConsultation}
-              onUncheckItem={handleUncheckConsultation}
-            />
-            <ActionChecklist
-              templates={data.actionTemplates}
-              items={data.actionItems}
-              onAdd={handleAddAction}
-              onRemove={handleRemoveAction}
-            />
-            <PrescriptionUpload prescriptions={data.prescriptions} onUpload={handleUploadPrescription} />
-          </div>
+        {/* One work column; it scrolls on its own while the frame stays put. */}
+        <div className="scroll-column mt-4 min-h-0 flex-1 space-y-4 pr-1">
+          <OcrTriageAlert alerts={data.triageAlerts} onResolve={handleResolveAlert} />
+          <HistoryGrid flowsheet={data.flowsheet} patientId={data.patient.id} />
         </div>
+
+        <SlideOver
+          open={notesOpen}
+          onClose={closeNotes}
+          title="Consultation"
+          subtitle={`Notes, actions and prescription for ${data.patient.name ?? 'this visit'}`}
+        >
+          <ConsultancyNotes
+            notes={data.notes}
+            onSave={handleSaveNotes}
+            templates={data.consultationTemplates}
+            checkedItems={data.consultationItems}
+            onCheckItem={handleCheckConsultation}
+            onUncheckItem={handleUncheckConsultation}
+          />
+          <ActionChecklist
+            templates={data.actionTemplates}
+            items={data.actionItems}
+            onAdd={handleAddAction}
+            onRemove={handleRemoveAction}
+          />
+          <PrescriptionUpload prescriptions={data.prescriptions} onUpload={handleUploadPrescription} />
+        </SlideOver>
       </div>
     );
   };
 
   return (
-    // The frame never scrolls; only the two work columns do. overflow-clip,
+    // The frame never scrolls; only the work column does. overflow-clip,
     // not overflow-hidden: a hidden box can still be scrolled by focus or
     // scrollIntoView, which slid the whole shell (sidebar included) up and
     // left a blank band at the bottom.

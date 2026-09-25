@@ -13,6 +13,7 @@ const {
   ingestReport,
   uploadReport,
   listReportsForPatient,
+  listSharedHistory,
   getMetricTrend,
   reviewMetric,
   listTriageQueue,
@@ -49,6 +50,7 @@ router.post('/upload', upload.single('file'), uploadReport);
 router.post('/', validateBody(ocrPayloadSchema), ingestReport);
 
 router.get('/', listReportsForPatient);
+router.get('/history', roleGuard('clinician'), listSharedHistory);
 router.get('/trend/:standardKey', getMetricTrend);
 router.get('/triage/queue', roleGuard('clinician'), listTriageQueue);
 

@@ -259,8 +259,13 @@ describe('standardizeMetrics', () => {
     }
   );
 
-  it('flags a range printed where a value belongs (a picked-up reference range)', async () => {
-    const result = await standardizeMetrics([{ key: 'hemoglobin', value: '0.00-20.00', unit: 'g/dl', confidence: 0.95 }]);
+  it.each(['0.00-20.00', '2-4', '12.5 – 15'])('keeps the range "%s" as printed without flagging it', async (value) => {
+    const result = await standardizeMetrics([{ key: 'hemoglobin', value, unit: 'g/dl', confidence: 0.95 }]);
+    expect(result[0]).toMatchObject({ needs_review: false, parsed_value: null, raw_value: value });
+  });
+
+  it('still flags a low-confidence range', async () => {
+    const result = await standardizeMetrics([{ key: 'hemoglobin', value: '2-4', unit: 'g/dl', confidence: 0.5 }]);
     expect(result[0].needs_review).toBe(true);
   });
 

@@ -1,4 +1,5 @@
 import { request, upload } from './apiClient.js';
+import { buildFlowsheet, reviewReason } from '../utils/flowsheet.js';
 
 /** Create an appointment, attach its questionnaire and invite the patient. */
 export async function createAppointment({
@@ -93,6 +94,13 @@ export async function fetchPatientDashboard(patientId, appointmentId) {
     getTemplates('action'),
   ]);
 
+  // Every report shared with any of this doctor's visits, for the history
+  // grid. Falls back to this visit's reports if the patient isn't linked yet
+  // or the history call fails — the grid then just has one column.
+  const history = patientId
+    ? await request(`/api/lab-reports/history?patientId=${patientId}`).catch(() => reports)
+    : reports;
+
   return {
     patient: buildPatient(appointment, patientId),
     appointment,
@@ -113,6 +121,9 @@ export async function fetchPatientDashboard(patientId, appointmentId) {
       }),
     },
     metrics: buildMetrics(reports),
+    // Kept so a resolved value can rebuild the grid without a refetch.
+    historyReports: history,
+    flowsheet: buildFlowsheet(history, appointmentId),
     triageAlerts: buildTriageAlerts(reports),
     notes: { text: postVisit?.notes?.notes_text ?? '', updatedAt: postVisit?.notes?.updated_at ?? null },
     // What the clinician ticked during this consultation.
@@ -267,35 +278,6 @@ function buildMetrics(reports = []) {
       recordedAt: latest?.date ?? printedAt?.toISOString() ?? null,
     };
   });
-}
-
-/** Mirrors OCR_CONFIDENCE_REVIEW_THRESHOLD on the server, for wording only. */
-const REVIEW_CONFIDENCE = 0.85;
-
-/**
- * Why a value was sent to review, most specific cause first — the same
- * checks the server's standardizer applies when it sets needs_review.
- */
-function reviewReason(metric) {
-  const raw = String(metric.raw_value ?? '').trim();
-
-  if (/^\d+(\.\d+)?\s*[-–]\s*\d+(\.\d+)?$/.test(raw)) {
-    return `Read "${raw}", which looks like the reference range rather than the result.`;
-  }
-  if (/^[<>≤≥]/.test(raw)) {
-    return `Printed as a limit (${raw}), not an exact value.`;
-  }
-  if (metric.parsed_value == null) {
-    return raw ? `Could not read a number from "${raw}".` : 'No value was found next to this test.';
-  }
-  if (typeof metric.confidence_score === 'number' && metric.confidence_score < REVIEW_CONFIDENCE) {
-    return `OCR confidence is below ${Math.round(REVIEW_CONFIDENCE * 100)}%.`;
-  }
-  if (metric.standard_key && metric.unit_raw && metric.unit_standard) {
-    return `Unit "${metric.unit_raw}" could not be converted to ${metric.unit_standard}.`;
-  }
-  if (!metric.standard_key) return 'Test name did not match the metric dictionary.';
-  return 'Value could not be read confidently.';
 }
 
 /** Metrics the OCR pipeline flagged for human review. */

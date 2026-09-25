@@ -203,16 +203,16 @@ const QUALITATIVE_RESULT = new RegExp(
   'i'
 );
 
-/** A microscopy count printed as a range ("2-4" pus cells per hpf). */
-const PER_FIELD_RANGE = /^\d+\s*[-–]\s*\d+$/;
+/** A result printed as a range: "2-4" pus cells per hpf, "0.00-20.00". */
+const RANGE_RESULT = /^\d+(\.\d+)?\s*[-–]\s*\d+(\.\d+)?$/;
 
 function isQualitativeResult(value, entry) {
   if (typeof value !== 'string') return false;
   const text = value.trim().replace(/\s+/g, ' ');
   if (QUALITATIVE_RESULT.test(text)) return true;
-  // A range is a real result only for urine microscopy; anywhere else it is
-  // almost always the reference range picked up instead of the value.
-  return entry?.category === 'urine' && PER_FIELD_RANGE.test(text);
+  // Ranges are shown as printed rather than sent to review; the clinician
+  // reads them in the grid next to the scan.
+  return RANGE_RESULT.test(text);
 }
 
 async function standardizeMetrics(rawMetrics) {
@@ -247,7 +247,8 @@ async function standardizeMetrics(rawMetrics) {
       ? convertUnit(numericValue, metric.unit, entry.unit_standard, entry.standard_key)
       : { value: null, converted: false };
 
-    const unitConversionFailed = Boolean(metric.unit) && conversion.converted === false;
+    // Only a number can fail to convert; a range or word result keeps its printed unit.
+    const unitConversionFailed = hasNumericValue && Boolean(metric.unit) && conversion.converted === false;
 
     const needsReview = unreadable || inexact || unitConversionFailed || belowConfidenceThreshold;
 

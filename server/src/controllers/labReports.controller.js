@@ -16,7 +16,7 @@ const {
 } = require('../services/access.service');
 
 /** Metric rows carry the dictionary's display name so the UI need not guess one. */
-const METRIC_COLUMNS = '*, metric_dictionary ( display_name )';
+const METRIC_COLUMNS = '*, metric_dictionary ( display_name, category )';
 
 /**
  * An appointment a report may be attached to: the caller must be part of it,
@@ -356,6 +356,46 @@ async function listReportsForPatient(req, res, next) {
   }
 }
 
+/**
+ * Every report a patient has shared with any of this clinician's visits, for
+ * the dashboard's history grid. The same sharing rule as getMetricTrend: a
+ * clinician never sees a report the patient kept back from all their visits.
+ */
+async function listSharedHistory(req, res, next) {
+  try {
+    const scope = await resolvePatientScope(req);
+    if (!scope.ok) return res.status(scope.status).json({ error: scope.error });
+    const { patientId } = scope;
+
+    const sharedIds = await reportIdsSharedWithClinician(req.user.id, patientId);
+    if (sharedIds.length === 0) return res.json([]);
+
+    const { data, error } = await supabaseAdmin
+      .from('lab_reports')
+      .select(`*, lab_report_metrics ( ${METRIC_COLUMNS} ), appointment_lab_reports ( appointment_id )`)
+      .eq('patient_id', patientId)
+      .in('id', sharedIds)
+      .order('uploaded_at', { ascending: false });
+    if (error) throw error;
+
+    const withUrls = await Promise.all(
+      (data || []).map(async (report) => ({
+        ...report,
+        signed_url: await createSignedUrl(LAB_REPORTS_BUCKET, report.storage_path),
+        shared_appointment_ids: (report.appointment_lab_reports || []).map((s) => s.appointment_id),
+      }))
+    );
+
+    // Newest first by the date the test was taken, falling back to upload.
+    const takenAt = (report) => new Date(report.report_date ?? report.uploaded_at).getTime();
+    withUrls.sort((a, b) => takenAt(b) - takenAt(a));
+
+    res.json(withUrls);
+  } catch (err) {
+    next(err);
+  }
+}
+
 async function getMetricTrend(req, res, next) {
   try {
     const { standardKey } = req.params;
@@ -444,6 +484,7 @@ module.exports = {
   ingestReport,
   uploadReport,
   listReportsForPatient,
+  listSharedHistory,
   getMetricTrend,
   reviewMetric,
   listTriageQueue,

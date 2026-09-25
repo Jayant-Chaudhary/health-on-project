@@ -380,3 +380,56 @@ describe('POST /lab-reports/share-all', () => {
     expect(response.status).toBe(403);
   });
 });
+
+describe('GET /lab-reports/history', () => {
+  const clinician = { id: 'dr-1', email: 'dr@example.com' };
+  const get = (query) => {
+    supabaseAdmin.auth.getUser.mockResolvedValue({ data: { user: clinician }, error: null });
+    return request(app).get(`/api/lab-reports/history${query}`).set('Authorization', 'Bearer t');
+  };
+
+  beforeEach(() => jest.clearAllMocks());
+
+  it('returns the reports shared with any of this clinician\'s visits, newest first', async () => {
+    const chains = mockTables(supabaseAdmin, {
+      profiles: profileRow('clinician'),
+      // clinicianHasPatient, then reportIdsSharedWithClinician.
+      appointments: [ok([{ id: 'appt-1' }]), ok([{ id: 'appt-1' }, { id: 'appt-2' }])],
+      appointment_lab_reports: ok([{ lab_report_id: 'r-old' }, { lab_report_id: 'r-new' }]),
+      lab_reports: ok([
+        { id: 'r-old', report_date: '2026-01-10', storage_path: 'p/1', lab_report_metrics: [] },
+        { id: 'r-new', report_date: '2026-09-25', storage_path: 'p/2', lab_report_metrics: [] },
+      ]),
+    });
+
+    const response = await get('?patientId=patient-9');
+
+    expect(response.status).toBe(200);
+    expect(response.body.map((r) => r.id)).toEqual(['r-new', 'r-old']);
+    expect(chains.lab_reports[0].in).toHaveBeenCalledWith('id', ['r-old', 'r-new']);
+  });
+
+  it('returns an empty list when nothing has been shared', async () => {
+    const chains = mockTables(supabaseAdmin, {
+      profiles: profileRow('clinician'),
+      appointments: [ok([{ id: 'appt-1' }]), ok([{ id: 'appt-1' }])],
+      appointment_lab_reports: ok([]),
+    });
+
+    const response = await get('?patientId=patient-9');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual([]);
+    expect(chains.lab_reports).toBeUndefined();
+  });
+
+  it("refuses a patient this clinician doesn't treat", async () => {
+    mockTables(supabaseAdmin, { profiles: profileRow('clinician'), appointments: ok([]) });
+    expect((await get('?patientId=someone-else')).status).toBe(403);
+  });
+
+  it('requires patientId', async () => {
+    mockTables(supabaseAdmin, { profiles: profileRow('clinician') });
+    expect((await get('')).status).toBe(400);
+  });
+});
