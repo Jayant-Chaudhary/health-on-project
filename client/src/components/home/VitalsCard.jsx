@@ -53,14 +53,14 @@ export default function VitalsCard() {
         <div className="flex items-center gap-3">
           <button 
             onClick={() => setWeight(w => parseFloat((w - 0.1).toFixed(1)))}
-            className="w-10 h-10 rounded-full bg-white shadow-sm flex items-center justify-center text-primary active:scale-95 transition-transform"
+            className="w-10 h-10 rounded-full bg-raised shadow-sm flex items-center justify-center text-primary active:scale-95 transition-transform"
           >
             <Minus size={20} />
           </button>
           <span className="text-xl font-bold w-16 text-center">{weight.toFixed(1)}</span>
           <button 
             onClick={() => setWeight(w => parseFloat((w + 0.1).toFixed(1)))}
-            className="w-10 h-10 rounded-full bg-white shadow-sm flex items-center justify-center text-primary active:scale-95 transition-transform"
+            className="w-10 h-10 rounded-full bg-raised shadow-sm flex items-center justify-center text-primary active:scale-95 transition-transform"
           >
             <Plus size={20} />
           </button>
@@ -83,7 +83,7 @@ export default function VitalsCard() {
               placeholder="120"
               value={systolic}
               onChange={e => setSystolic(e.target.value)}
-              className="w-full bg-white rounded-lg p-3 text-center font-bold focus-visible:ring-2 ring-primary outline-none" 
+              className="w-full bg-raised rounded-lg p-3 text-center font-bold focus-visible:ring-2 ring-primary outline-none" 
             />
             <span className="text-ink-soft text-xl">/</span>
             <input 
@@ -91,7 +91,7 @@ export default function VitalsCard() {
               placeholder="80"
               value={diastolic}
               onChange={e => setDiastolic(e.target.value)}
-              className="w-full bg-white rounded-lg p-3 text-center font-bold focus-visible:ring-2 ring-primary outline-none" 
+              className="w-full bg-raised rounded-lg p-3 text-center font-bold focus-visible:ring-2 ring-primary outline-none" 
             />
           </div>
         </div>

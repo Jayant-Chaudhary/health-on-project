@@ -1,0 +1,119 @@
+/*
+ * Theme colours as RGB channels, so Tailwind's opacity modifiers
+ * (`border-ink-soft/10`) keep working. Light is the default; `.dark` on
+ * <html> switches every token at once. Generated from one table — change a
+ * colour in both blocks together.
+ */
+:root {
+  color-scheme: light;
+  --c-primary: 47 111 107;
+  --c-primary-dark: 36 90 87;
+  --c-primary-light: 228 240 239;
+  --c-accent: 242 131 107;
+  --c-accent-dark: 224 109 84;
+  --c-accent-light: 253 236 232;
+  --c-canvas: 251 248 245;
+  --c-canvas-alt: 243 238 232;
+  --c-ink: 31 41 51;
+  --c-ink-soft: 107 114 128;
+  --c-success: 76 175 125;
+  --c-success-light: 230 245 236;
+  --c-success-dark: 47 122 85;
+  --c-attention: 245 176 65;
+  --c-attention-light: 254 243 221;
+  --c-attention-dark: 168 101 15;
+  --c-danger: 180 101 74;
+  --c-subcanvas: 250 245 238;
+  --c-surface: 255 253 251;
+  --c-raised: 255 255 255;
+  --c-line: 234 227 214;
+  --c-line-strong: 222 207 193;
+  --c-ink-2: 99 91 84;
+  --c-ink-3: 145 135 126;
+  --c-cypress: 44 64 53;
+  --c-cypress-deep: 33 48 40;
+  --c-cypress-soft: 78 101 84;
+  --c-sage: 96 122 104;
+  --c-sage-surface: 238 244 240;
+  --c-sage-border: 207 223 212;
+  --c-sage-ink: 78 101 84;
+  --c-terracotta: 180 101 74;
+  --c-terracotta-surface: 253 242 238;
+  --c-terracotta-border: 244 211 199;
+  --c-terracotta-deep: 158 84 59;
+  --c-rose: 196 138 150;
+  --c-rose-surface: 251 241 243;
+  --c-rose-border: 239 207 213;
+  --c-olive: 133 122 104;
+  --c-olive-surface: 245 242 236;
+  --c-olive-border: 230 223 209;
+  --c-sand-100: 245 239 227;
+  --c-sand-800: 107 90 62;
+  --c-pine-50: 243 247 244;
+  --c-pine-100: 228 236 231;
+  --c-pine-200: 207 223 212;
+  --c-pine-300: 175 197 182;
+  --c-pine-400: 134 162 144;
+  --c-pine-500: 96 122 104;
+  --c-pine-600: 78 101 84;
+  --c-pine-700: 59 82 68;
+  --c-pine-800: 44 64 53;
+  --c-pine-900: 33 48 40;
+}
+
+.dark {
+  color-scheme: dark;
+  --c-primary: 78 158 152;
+  --c-primary-dark: 63 133 128;
+  --c-primary-light: 23 48 46;
+  --c-accent: 242 131 107;
+  --c-accent-dark: 232 138 116;
+  --c-accent-light: 58 35 29;
+  --c-canvas: 20 18 16;
+  --c-canvas-alt: 28 25 22;
+  --c-ink: 238 232 225;
+  --c-ink-soft: 165 157 148;
+  --c-success: 91 191 140;
+  --c-success-light: 23 48 36;
+  --c-success-dark: 126 211 166;
+  --c-attention: 245 176 65;
+  --c-attention-light: 51 39 15;
+  --c-attention-dark: 242 192 105;
+  --c-danger: 224 137 110;
+  --c-subcanvas: 26 23 20;
+  --c-surface: 31 28 25;
+  --c-raised: 38 34 31;
+  --c-line: 52 47 42;
+  --c-line-strong: 72 66 59;
+  --c-ink-2: 203 195 186;
+  --c-ink-3: 151 142 133;
+  --c-cypress: 110 156 128;
+  --c-cypress-deep: 90 132 105;
+  --c-cypress-soft: 141 179 155;
+  --c-sage: 126 156 135;
+  --c-sage-surface: 28 38 32;
+  --c-sage-border: 47 65 54;
+  --c-sage-ink: 169 196 177;
+  --c-terracotta: 217 132 102;
+  --c-terracotta-surface: 46 29 23;
+  --c-terracotta-border: 90 53 38;
+  --c-terracotta-deep: 233 160 132;
+  --c-rose: 213 154 166;
+  --c-rose-surface: 44 28 32;
+  --c-rose-border: 84 50 58;
+  --c-olive: 165 154 135;
+  --c-olive-surface: 36 33 28;
+  --c-olive-border: 61 55 46;
+  --c-sand-100: 42 36 27;
+  --c-sand-800: 216 200 168;
+  --c-pine-50: 26 34 29;
+  --c-pine-100: 31 42 35;
+  --c-pine-200: 47 65 54;
+  --c-pine-300: 62 86 71;
+  --c-pine-400: 90 122 102;
+  --c-pine-500: 126 156 135;
+  --c-pine-600: 151 179 159;
+  --c-pine-700: 178 200 185;
+  --c-pine-800: 203 219 208;
+  --c-pine-900: 226 236 229;
+}

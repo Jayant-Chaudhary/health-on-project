@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Icon } from '../common/Icon.jsx';
 import { Avatar } from '../common/Avatar.jsx';
+import { ThemeToggle } from '../common/ThemeToggle.jsx';
 import { formatHeaderDate } from '../../utils/format.js';
 import { statusOf } from '../../utils/clinical.js';
 import { useAuthContext } from '../../context/AuthContext.jsx';
@@ -109,6 +110,8 @@ export function Topbar({ patients = [], onSelectPatient, notifications = [] }) {
         <Icon name="calendar" size={15} className="text-ink-3" />
         <span className="tabular">{formatHeaderDate()}</span>
       </div>
+
+      <ThemeToggle />
 
       <div className="relative shrink-0">
         <button

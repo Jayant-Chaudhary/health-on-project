@@ -15,7 +15,7 @@ export const PasswordField = React.forwardRef(({ className, ...props }, ref) => 
       />
       <button
         type="button"
-        className="absolute right-0 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary min-h-[48px] min-w-[48px] flex items-center justify-center rounded-r-md"
+        className="absolute right-0 top-1/2 -translate-y-1/2 text-ink-3 hover:text-ink-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary min-h-[48px] min-w-[48px] flex items-center justify-center rounded-r-md"
         onClick={() => setShow(!show)}
       >
         {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}

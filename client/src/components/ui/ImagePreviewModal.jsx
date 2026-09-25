@@ -5,7 +5,7 @@ import { cn } from '../../utils/cn';
 export function ImagePreviewModal({ isOpen, onClose, imageUrl, altText = "Preview" }) {
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Image Preview" className="max-w-3xl">
-      <div className="flex items-center justify-center bg-gray-50 min-h-[200px] rounded-md">
+      <div className="flex items-center justify-center bg-subcanvas min-h-[200px] rounded-md">
         {imageUrl ? (
           <img 
             src={imageUrl} 
@@ -13,7 +13,7 @@ export function ImagePreviewModal({ isOpen, onClose, imageUrl, altText = "Previe
             className="max-w-full max-h-[70vh] object-contain rounded-md" 
           />
         ) : (
-          <div className="text-gray-500 py-8">No image available</div>
+          <div className="text-ink-3 py-8">No image available</div>
         )}
       </div>
     </Modal>

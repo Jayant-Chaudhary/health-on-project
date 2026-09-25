@@ -32,10 +32,10 @@ export default function SignupPage() {
   const strengthScore = calculateStrength(formData.password);
   
   const getStrengthColor = (score) => {
-    if (score === 0) return 'bg-slate-200';
-    if (score <= 2) return 'bg-red-500 w-2/5';
-    if (score <= 4) return 'bg-yellow-500 w-4/5';
-    return 'bg-green-500 w-full';
+    if (score === 0) return 'bg-line';
+    if (score <= 2) return 'bg-terracotta w-2/5';
+    if (score <= 4) return 'bg-attention w-4/5';
+    return 'bg-success w-full';
   };
   
   const getStrengthText = (score) => {
@@ -96,19 +96,19 @@ export default function SignupPage() {
 
   return (
     <div className="w-full">
-      <h2 className="text-3xl font-bold text-slate-900 mb-2">Create an account</h2>
-      <p className="text-slate-600 mb-6">Join MedBrief to prepare for and follow up on every visit</p>
+      <h2 className="text-3xl font-bold text-ink mb-2">Create an account</h2>
+      <p className="text-ink-2 mb-6">Join MedBrief to prepare for and follow up on every visit</p>
 
       {/* Role Toggle */}
-      <div className="flex p-1 bg-slate-100 rounded-lg mb-6 border border-slate-200">
+      <div className="flex p-1 bg-subcanvas rounded-lg mb-6 border border-line">
         <button
           type="button"
           onClick={() => setRole('patient')}
           className={cn(
             "flex-1 py-2 text-sm font-medium rounded-md transition-colors",
             role === 'patient'
-              ? "bg-white text-slate-900 shadow-sm font-semibold"
-              : "text-slate-500 hover:text-slate-700"
+              ? "bg-raised text-ink shadow-sm font-semibold"
+              : "text-ink-3 hover:text-ink-2"
           )}
         >
           I am a Patient
@@ -119,8 +119,8 @@ export default function SignupPage() {
           className={cn(
             "flex-1 py-2 text-sm font-medium rounded-md transition-colors",
             role === 'clinician'
-              ? "bg-white text-slate-900 shadow-sm font-semibold"
-              : "text-slate-500 hover:text-slate-700"
+              ? "bg-raised text-ink shadow-sm font-semibold"
+              : "text-ink-3 hover:text-ink-2"
           )}
         >
           I am a Doctor
@@ -128,7 +128,7 @@ export default function SignupPage() {
       </div>
 
       {error && (
-        <div className="p-3 mb-6 bg-red-50 text-red-700 border border-red-200 rounded-lg text-sm">
+        <div className="p-3 mb-6 bg-terracotta-surface text-terracotta-deep border border-terracotta-border rounded-lg text-sm">
           {error}
         </div>
       )}
@@ -156,12 +156,12 @@ export default function SignupPage() {
           {formData.password && (
             <div className="pt-1">
               <div className="flex justify-between items-center mb-1">
-                <span className="text-xs text-slate-500 font-medium">Password strength</span>
-                <span className={`text-xs font-semibold ${strengthScore <= 2 ? 'text-red-600' : strengthScore <= 4 ? 'text-yellow-600' : 'text-green-600'}`}>
+                <span className="text-xs text-ink-3 font-medium">Password strength</span>
+                <span className={`text-xs font-semibold ${strengthScore <= 2 ? 'text-terracotta' : strengthScore <= 4 ? 'text-attention-dark' : 'text-success-dark'}`}>
                   {getStrengthText(strengthScore)}
                 </span>
               </div>
-              <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden flex">
+              <div className="h-1.5 w-full bg-subcanvas rounded-full overflow-hidden flex">
                 <div 
                   className={`h-full transition-all duration-300 ease-out ${getStrengthColor(strengthScore)}`}
                 />
@@ -184,9 +184,9 @@ export default function SignupPage() {
         </Button>
       </form>
 
-      <p className="mt-8 text-center text-sm text-slate-600">
+      <p className="mt-8 text-center text-sm text-ink-2">
         Already have an account?{' '}
-        <Link to="/login" className="text-green-800 hover:text-green-900 font-semibold underline-offset-4 hover:underline">
+        <Link to="/login" className="text-primary hover:text-primary-dark font-semibold underline-offset-4 hover:underline">
           Sign in here
         </Link>
       </p>

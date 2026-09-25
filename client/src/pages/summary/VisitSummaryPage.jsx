@@ -108,7 +108,7 @@ export default function VisitSummaryPage() {
                 className={`p-4 rounded-card border cursor-pointer transition-all ${
                   selectedId === visit.id
                     ? 'bg-primary-light border-primary/50 shadow-sm'
-                    : 'bg-white border-ink-soft/20 hover:border-primary/40 hover:shadow-sm'
+                    : 'bg-raised border-ink-soft/20 hover:border-primary/40 hover:shadow-sm'
                 }`}
               >
                 <div className="flex items-center justify-between">

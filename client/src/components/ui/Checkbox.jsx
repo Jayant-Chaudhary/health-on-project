@@ -15,14 +15,14 @@ export const Checkbox = React.forwardRef(({ className, checked, onChange, label,
           {...props}
         />
         <div className={cn(
-          "h-5 w-5 rounded border border-gray-300 bg-white transition-colors group-hover:border-primary peer-focus-visible:ring-2 peer-focus-visible:ring-primary",
+          "h-5 w-5 rounded border border-line-strong bg-raised transition-colors group-hover:border-primary peer-focus-visible:ring-2 peer-focus-visible:ring-primary",
           checked && "bg-primary border-primary",
           className
         )}>
           {checked && <Check className="h-3.5 w-3.5 text-white absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />}
         </div>
       </div>
-      {label && <span className="ml-3 text-sm text-gray-700 select-none">{label}</span>}
+      {label && <span className="ml-3 text-sm text-ink-2 select-none">{label}</span>}
     </label>
   );
 });

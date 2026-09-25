@@ -1,42 +1,98 @@
 /** @type {import('tailwindcss').Config} */
 export default {
+  // `.dark` on <html> (set by ThemeContext) switches the colour tokens.
+  darkMode: 'class',
   content: [
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",
   ],
   theme: {
     extend: {
+      // Every colour is a CSS variable (src/theme-tokens.css) with a light and
+      // a dark value, so the same class works in both themes.
       colors: {
-        primary:   { DEFAULT: '#2F6F6B', dark: '#245A57', light: '#E4F0EF' }, // deep teal
-        accent:    { DEFAULT: '#F2836B', dark: '#E06D54', light: '#FDECE8' }, // warm coral
-        canvas:    { DEFAULT: '#FBF8F5', alt: '#F3EEE8' },   // page background, recessed panels
-        ink:       { DEFAULT: '#1F2933', soft: '#6B7280' },
-        success:   { DEFAULT: '#4CAF7D', light: '#E6F5EC', dark: '#2F7A55' },
-        attention: { DEFAULT: '#F5B041', light: '#FEF3DD', dark: '#A8650F' }, // amber, NEVER red
-        danger:    { DEFAULT: '#B4654A' }, // form errors — the terracotta, not a clinical red
-        
-        // Clinician palette
-        subcanvas: '#FAF5EE',
-        surface: '#FFFDFB',
-        raised: '#FFFFFF',
-        line: '#EAE3D6',
-        'line-strong': '#DECFC1',
-        'ink-2': '#635B54',
-        'ink-3': '#91877E',
-        cypress: { DEFAULT: '#2C4035', deep: '#213028', soft: '#4E6554' },
-        sage: { DEFAULT: '#607A68', surface: '#EEF4F0', border: '#CFDFD4', ink: '#4E6554' },
+        primary: {
+          DEFAULT: 'rgb(var(--c-primary) / <alpha-value>)',
+          dark: 'rgb(var(--c-primary-dark) / <alpha-value>)',
+          light: 'rgb(var(--c-primary-light) / <alpha-value>)',
+        },
+        accent: {
+          DEFAULT: 'rgb(var(--c-accent) / <alpha-value>)',
+          dark: 'rgb(var(--c-accent-dark) / <alpha-value>)',
+          light: 'rgb(var(--c-accent-light) / <alpha-value>)',
+        },
+        canvas: {
+          DEFAULT: 'rgb(var(--c-canvas) / <alpha-value>)',
+          alt: 'rgb(var(--c-canvas-alt) / <alpha-value>)',
+        },
+        ink: {
+          DEFAULT: 'rgb(var(--c-ink) / <alpha-value>)',
+          soft: 'rgb(var(--c-ink-soft) / <alpha-value>)',
+        },
+        success: {
+          DEFAULT: 'rgb(var(--c-success) / <alpha-value>)',
+          light: 'rgb(var(--c-success-light) / <alpha-value>)',
+          dark: 'rgb(var(--c-success-dark) / <alpha-value>)',
+        },
+        attention: {
+          DEFAULT: 'rgb(var(--c-attention) / <alpha-value>)',
+          light: 'rgb(var(--c-attention-light) / <alpha-value>)',
+          dark: 'rgb(var(--c-attention-dark) / <alpha-value>)',
+        },
+        danger: { DEFAULT: 'rgb(var(--c-danger) / <alpha-value>)' },
+        subcanvas: 'rgb(var(--c-subcanvas) / <alpha-value>)',
+        surface: 'rgb(var(--c-surface) / <alpha-value>)',
+        raised: 'rgb(var(--c-raised) / <alpha-value>)',
+        line: 'rgb(var(--c-line) / <alpha-value>)',
+        'line-strong': 'rgb(var(--c-line-strong) / <alpha-value>)',
+        'ink-2': 'rgb(var(--c-ink-2) / <alpha-value>)',
+        'ink-3': 'rgb(var(--c-ink-3) / <alpha-value>)',
+        cypress: {
+          DEFAULT: 'rgb(var(--c-cypress) / <alpha-value>)',
+          deep: 'rgb(var(--c-cypress-deep) / <alpha-value>)',
+          soft: 'rgb(var(--c-cypress-soft) / <alpha-value>)',
+        },
+        sage: {
+          DEFAULT: 'rgb(var(--c-sage) / <alpha-value>)',
+          surface: 'rgb(var(--c-sage-surface) / <alpha-value>)',
+          border: 'rgb(var(--c-sage-border) / <alpha-value>)',
+          ink: 'rgb(var(--c-sage-ink) / <alpha-value>)',
+        },
         terracotta: {
-          DEFAULT: '#B4654A', surface: '#FDF2EE', border: '#F4D3C7', deep: '#9E543B',
-          50: '#FDF2EE', 200: '#F4D3C7', 600: '#9E543B',
+          DEFAULT: 'rgb(var(--c-terracotta) / <alpha-value>)',
+          surface: 'rgb(var(--c-terracotta-surface) / <alpha-value>)',
+          border: 'rgb(var(--c-terracotta-border) / <alpha-value>)',
+          deep: 'rgb(var(--c-terracotta-deep) / <alpha-value>)',
+          '50': 'rgb(var(--c-terracotta-surface) / <alpha-value>)',
+          '200': 'rgb(var(--c-terracotta-border) / <alpha-value>)',
+          '600': 'rgb(var(--c-terracotta-deep) / <alpha-value>)',
         },
-        // Numeric scale of the cypress greens, for screens written against one.
+        rose: {
+          DEFAULT: 'rgb(var(--c-rose) / <alpha-value>)',
+          surface: 'rgb(var(--c-rose-surface) / <alpha-value>)',
+          border: 'rgb(var(--c-rose-border) / <alpha-value>)',
+        },
+        olive: {
+          DEFAULT: 'rgb(var(--c-olive) / <alpha-value>)',
+          surface: 'rgb(var(--c-olive-surface) / <alpha-value>)',
+          border: 'rgb(var(--c-olive-border) / <alpha-value>)',
+        },
+        sand: {
+          '100': 'rgb(var(--c-sand-100) / <alpha-value>)',
+          '800': 'rgb(var(--c-sand-800) / <alpha-value>)',
+        },
         pine: {
-          50: '#F3F7F4', 100: '#E4ECE7', 200: '#CFDFD4', 300: '#AFC5B6', 400: '#86A290',
-          500: '#607A68', 600: '#4E6554', 700: '#3B5244', 800: '#2C4035', 900: '#213028',
+          '50': 'rgb(var(--c-pine-50) / <alpha-value>)',
+          '100': 'rgb(var(--c-pine-100) / <alpha-value>)',
+          '200': 'rgb(var(--c-pine-200) / <alpha-value>)',
+          '300': 'rgb(var(--c-pine-300) / <alpha-value>)',
+          '400': 'rgb(var(--c-pine-400) / <alpha-value>)',
+          '500': 'rgb(var(--c-pine-500) / <alpha-value>)',
+          '600': 'rgb(var(--c-pine-600) / <alpha-value>)',
+          '700': 'rgb(var(--c-pine-700) / <alpha-value>)',
+          '800': 'rgb(var(--c-pine-800) / <alpha-value>)',
+          '900': 'rgb(var(--c-pine-900) / <alpha-value>)',
         },
-        sand: { 100: '#F5EFE3', 800: '#6B5A3E' },
-        rose: { DEFAULT: '#C48A96', surface: '#FBF1F3', border: '#EFCFD5' },
-        olive: { DEFAULT: '#857A68', surface: '#F5F2EC', border: '#E6DFD1' },
       },
       fontFamily: {
         sans: ['"Plus Jakarta Sans"', 'system-ui', 'sans-serif'],

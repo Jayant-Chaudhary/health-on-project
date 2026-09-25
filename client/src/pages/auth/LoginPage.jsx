@@ -49,11 +49,11 @@ export default function LoginPage() {
 
   return (
     <div className="w-full">
-      <h2 className="text-3xl font-bold text-slate-900 mb-2">Welcome back</h2>
-      <p className="text-slate-600 mb-6">Sign in to your MedBrief account</p>
+      <h2 className="text-3xl font-bold text-ink mb-2">Welcome back</h2>
+      <p className="text-ink-2 mb-6">Sign in to your MedBrief account</p>
 
       {error && (
-        <div className="p-3 mb-6 bg-red-50 text-red-700 border border-red-200 rounded-lg text-sm">
+        <div className="p-3 mb-6 bg-terracotta-surface text-terracotta-deep border border-terracotta-border rounded-lg text-sm">
           {error}
         </div>
       )}
@@ -79,10 +79,10 @@ export default function LoginPage() {
 
         <div className="flex items-center justify-between text-sm">
           <label className="flex items-center gap-2 cursor-pointer">
-            <input type="checkbox" className="rounded text-green-700 focus:ring-green-600" />
-            <span className="text-slate-600">Remember me</span>
+            <input type="checkbox" className="rounded text-primary focus:ring-primary" />
+            <span className="text-ink-2">Remember me</span>
           </label>
-          <a href="#" className="text-green-800 hover:text-green-900 font-medium">
+          <a href="#" className="text-primary hover:text-primary-dark font-medium">
             Forgot password?
           </a>
         </div>
@@ -92,9 +92,9 @@ export default function LoginPage() {
         </Button>
       </form>
 
-      <p className="mt-8 text-center text-sm text-slate-600">
+      <p className="mt-8 text-center text-sm text-ink-2">
         Don't have an account?{' '}
-        <Link to="/signup" className="text-green-800 hover:text-green-900 font-semibold underline-offset-4 hover:underline">
+        <Link to="/signup" className="text-primary hover:text-primary-dark font-semibold underline-offset-4 hover:underline">
           Create an account
         </Link>
       </p>

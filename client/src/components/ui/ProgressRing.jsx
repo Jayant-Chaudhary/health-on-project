@@ -13,7 +13,7 @@ export function ProgressRing({ progress, size = 48, strokeWidth = 4, className }
           cx={size / 2}
           cy={size / 2}
           r={radius}
-          className="text-gray-200"
+          className="text-line"
           strokeWidth={strokeWidth}
           stroke="currentColor"
           fill="transparent"

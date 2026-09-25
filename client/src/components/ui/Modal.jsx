@@ -19,15 +19,15 @@ export function Modal({ isOpen, onClose, title, children, className }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 sm:p-0">
       <div 
-        className={cn("bg-white rounded-card shadow-card w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]", className)}
+        className={cn("bg-raised rounded-card shadow-card w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]", className)}
         role="dialog"
         aria-modal="true"
       >
         <div className="flex items-center justify-between p-4 border-b">
-          <h2 className="text-lg font-semibold text-gray-900">{title}</h2>
+          <h2 className="text-lg font-semibold text-ink">{title}</h2>
           <button
             onClick={onClose}
-            className="p-2 text-gray-500 hover:text-gray-700 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary min-h-[48px] min-w-[48px] flex items-center justify-center -mr-2"
+            className="p-2 text-ink-3 hover:text-ink-2 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary min-h-[48px] min-w-[48px] flex items-center justify-center -mr-2"
             aria-label="Close modal"
           >
             <X className="h-5 w-5" />

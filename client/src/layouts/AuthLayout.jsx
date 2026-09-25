@@ -3,7 +3,7 @@ import { Outlet } from 'react-router-dom';
 
 export default function AuthLayout() {
   return (
-    <div className="flex flex-col lg:flex-row min-h-screen bg-slate-50 text-slate-900">
+    <div className="flex flex-col lg:flex-row min-h-screen bg-canvas text-ink">
       {/* Mobile header (only header is green on mobile) */}
       <div className="lg:hidden flex items-center gap-3 px-6 py-4 bg-green-800 text-slate-100 shadow-sm">
         <div className="w-8 h-8 bg-slate-100 rounded-lg flex items-center justify-center text-green-800 font-bold text-base shadow-sm">
@@ -35,7 +35,7 @@ export default function AuthLayout() {
       </div>
 
       {/* Right side: form area (kept like web view for both mobile and desktop) */}
-      <div className="flex flex-col justify-center flex-1 px-6 py-10 sm:px-12 lg:px-24 bg-slate-50 text-slate-900">
+      <div className="flex flex-col justify-center flex-1 px-6 py-10 sm:px-12 lg:px-24 bg-canvas text-ink">
         <div className="w-full max-w-md mx-auto">
           <Outlet />
         </div>
