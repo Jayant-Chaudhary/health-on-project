@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const path = require('path');
 const supabaseAdmin = require('../config/supabaseAdminClient');
+const log = require('../utils/logger').child({ scope: 'storage' });
 
 const LAB_REPORTS_BUCKET = 'lab-reports';
 const PRESCRIPTIONS_BUCKET = 'prescriptions';
@@ -24,9 +25,11 @@ async function uploadFile({ bucket, ownerId, buffer, originalName, contentType }
     .upload(storagePath, buffer, { contentType: contentType || 'application/octet-stream', upsert: false });
 
   if (error) {
+    log.error(`upload to ${bucket} failed: ${error.message}`, { bucket, ownerId, bytes: buffer?.length });
     throw new Error(`Failed to store file: ${error.message}`);
   }
 
+  log.debug(`stored ${bucket}/${storagePath}`, { bytes: buffer?.length, contentType });
   return storagePath;
 }
 
@@ -37,7 +40,7 @@ async function createSignedUrl(bucket, storagePath, expiresIn = SIGNED_URL_TTL_S
   const { data, error } = await supabaseAdmin.storage.from(bucket).createSignedUrl(storagePath, expiresIn);
 
   if (error) {
-    console.warn(`[storage] could not sign ${bucket}/${storagePath}: ${error.message}`);
+    log.warn(`could not sign ${bucket}/${storagePath}: ${error.message}`);
     return null;
   }
 
@@ -47,7 +50,7 @@ async function createSignedUrl(bucket, storagePath, expiresIn = SIGNED_URL_TTL_S
 async function removeFile(bucket, storagePath) {
   if (!storagePath) return;
   const { error } = await supabaseAdmin.storage.from(bucket).remove([storagePath]);
-  if (error) console.warn(`[storage] could not remove ${bucket}/${storagePath}: ${error.message}`);
+  if (error) log.warn(`could not remove ${bucket}/${storagePath}: ${error.message}`);
 }
 
 module.exports = {

@@ -1,6 +1,7 @@
 const axios = require('axios');
 const FormData = require('form-data');
 const env = require('../config/env');
+const log = require('../utils/logger').child({ scope: 'ocr' });
 
 const OCR_SERVICE_URL = env.ocrServiceUrl.replace(/\/+$/, '');
 
@@ -88,6 +89,9 @@ async function extractFromFile({ buffer, filename, contentType, requestId }) {
     extraHeaders['X-Request-Id'] = requestId;
   }
 
+  const started = Date.now();
+  log.debug('predict-by-file request', { reqId: requestId, filename, contentType, bytes: buffer.length });
+
   try {
     const response = await axios.post(
       `${OCR_SERVICE_URL}/ocr/predict-by-file`,
@@ -100,9 +104,18 @@ async function extractFromFile({ buffer, filename, contentType, requestId }) {
       }
     );
 
+    log.debug('predict-by-file response', { reqId: requestId, status: response.status, durationMs: Date.now() - started });
     return response.data;
   } catch (error) {
-    throw toServiceError(error);
+    const serviceError = toServiceError(error);
+    log.warn(`predict-by-file failed: ${serviceError.message}`, {
+      reqId: requestId,
+      status: serviceError.status,
+      code: error.code,
+      upstreamStatus: error.response?.status,
+      durationMs: Date.now() - started,
+    });
+    throw serviceError;
   }
 }
 
@@ -120,7 +133,8 @@ async function extractFromFile({ buffer, filename, contentType, requestId }) {
  *
  * @returns {Promise<{storagePath, reportDate, ocrStatus, metrics, raw, error?}>}
  */
-async function processDocument({ buffer, filename, contentType, storagePath, appointmentId }) {
+async function processDocument({ buffer, filename, contentType, storagePath, appointmentId, requestId }) {
+  const started = Date.now();
   try {
     if (!Buffer.isBuffer(buffer) || buffer.length === 0) {
       throw new TypeError('A non-empty file buffer is required');
@@ -131,10 +145,19 @@ async function processDocument({ buffer, filename, contentType, storagePath, app
       { storage_path: storagePath, appointment_id: appointmentId }
     );
 
+    log.debug('document/process request', {
+      reqId: requestId,
+      filename,
+      contentType,
+      bytes: buffer.length,
+      storagePath,
+      appointmentId,
+    });
+
     let response;
     try {
       response = await axios.post(`${OCR_SERVICE_URL}/document/process`, form, {
-        headers: form.getHeaders(),
+        headers: { ...form.getHeaders(), ...(requestId && { 'X-Request-Id': requestId }) },
         timeout: env.ocr.timeoutMs,
         maxBodyLength: Infinity,
         maxContentLength: Infinity,
@@ -148,7 +171,7 @@ async function processDocument({ buffer, filename, contentType, storagePath, app
       throw new Error('OCR service returned no ingest payload');
     }
 
-    return {
+    const result = {
       storagePath,
       reportDate: ingest.reportDate ?? null,
       ocrStatus: ['success', 'partial', 'failed'].includes(ingest.ocrStatus) ? ingest.ocrStatus : 'failed',
@@ -156,8 +179,22 @@ async function processDocument({ buffer, filename, contentType, storagePath, app
       // The full envelope (text, routing, warnings) for raw_ocr_payload.
       raw: response.data.result ?? null,
     };
+
+    log.info('document processed', {
+      reqId: requestId,
+      ocrStatus: result.ocrStatus,
+      metricCount: result.metrics.length,
+      rawStatus: ingest.ocrStatus,
+      durationMs: Date.now() - started,
+    });
+    return result;
   } catch (err) {
-    console.warn('[ocr] extraction failed, recording the upload anyway:', err.message);
+    log.warn(`extraction failed, recording the upload anyway: ${err.message}`, {
+      reqId: requestId,
+      status: err.status,
+      code: err.cause?.code,
+      durationMs: Date.now() - started,
+    });
     return { storagePath, reportDate: null, ocrStatus: 'failed', metrics: [], raw: null, error: err.message };
   }
 }
@@ -172,7 +209,7 @@ async function checkOcrHealth() {
     return response.status === 200;
   } catch (error) {
     // Log so ops can distinguish "service is down" from "OCR_SERVICE_URL is misconfigured".
-    console.warn('[OCR] Health check failed:', error?.message ?? 'unknown error');
+    log.warn(`health check failed: ${error?.message ?? 'unknown error'}`, { url: `${OCR_SERVICE_URL}/health` });
     return false;
   }
 }

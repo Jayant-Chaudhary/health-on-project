@@ -138,6 +138,7 @@ async function uploadReport(req, res, next) {
       contentType: req.file.mimetype,
       storagePath,
       appointmentId,
+      requestId: req.id,
     });
 
     const result = await persistReport({

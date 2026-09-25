@@ -1,4 +1,5 @@
 require('dotenv').config();
+const logger = require('../utils/logger');
 
 const required = [
   'SUPABASE_URL',
@@ -10,7 +11,7 @@ const required = [
 
 for (const key of required) {
   if (!process.env[key]) {
-    console.warn(`[Config Warning]: Missing environment variable: ${key}. Using default fallback if applicable.`);
+    logger.warn(`Missing environment variable ${key}; using default fallback if applicable`, { scope: 'config' });
   }
 }
 

@@ -1,5 +1,6 @@
 const supabaseAdmin = require('../config/supabaseAdminClient');
 const { findAuthUserByEmail } = require('../services/authUsers.service');
+const logger = require('../utils/logger');
 
 /**
  * @desc   Describe an invite so the landing page can show what it is for
@@ -207,7 +208,7 @@ async function signup(req, res, next) {
       });
 
     if (profileError) {
-      console.error('[Profile creation warning]:', profileError.message);
+      (req.log || logger).error('profile upsert failed during signup', { userId: user.id, role, err: profileError });
     }
 
     if (role === 'patient') {

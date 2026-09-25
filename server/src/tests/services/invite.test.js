@@ -22,6 +22,7 @@ jest.mock('../../config/env', () => ({
 const nodemailer = require('nodemailer');
 const supabaseAdmin = require('../../config/supabaseAdminClient');
 const { createAndSendInvite } = require('../../services/invite.service');
+const logger = require('../../utils/logger');
 
 describe('Invite Service', () => {
   beforeEach(() => {
@@ -74,7 +75,7 @@ describe('Invite Service', () => {
       const transport = nodemailer.createTransport();
       transport.sendMail.mockRejectedValue(new Error('Network timeout'));
 
-      const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      const warnSpy = jest.spyOn(logger, 'warn').mockImplementation(() => {});
 
       const result = await createAndSendInvite({
         appointmentId: 'appt-1',
@@ -83,12 +84,12 @@ describe('Invite Service', () => {
 
       // The link is returned so the clinician UI can hand it over if SMTP fails.
       expect(result).toEqual({ ...mockInvite, inviteLink: expect.stringMatching(/\/invite\/[0-9a-f]{64}$/) });
-      expect(consoleWarnSpy).toHaveBeenCalledWith(
-        '[Invite Email Notice]: Could not send email via SMTP, but invite token was generated successfully:', 
-        'Network timeout'
+      expect(warnSpy).toHaveBeenCalledWith(
+        'could not send invite email via SMTP; invite token was still created',
+        expect.objectContaining({ scope: 'invite', appointmentId: 'appt-1', error: 'Network timeout' })
       );
-      
-      consoleWarnSpy.mockRestore();
+
+      warnSpy.mockRestore();
     });
   });
 });
