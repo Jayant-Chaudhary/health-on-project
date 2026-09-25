@@ -38,7 +38,9 @@ export default function SymptomsStep() {
           Object.fromEntries(
             answerRows.map((row) => [
               row.template_id,
-              { value: row.answer ? 'yes' : 'no', notes: row.detail ?? '' },
+              row.answer_text != null
+                ? { text: row.answer_text }
+                : { value: row.answer ? 'yes' : 'no', notes: row.detail ?? '' },
             ])
           )
         );
@@ -56,6 +58,10 @@ export default function SymptomsStep() {
       ...prev,
       [questionId]: { ...prev[questionId], value }
     }));
+  };
+
+  const handleText = (questionId, text) => {
+    setAnswers(prev => ({ ...prev, [questionId]: { text } }));
   };
 
   const handleNotes = (questionId, notes) => {
@@ -78,7 +84,10 @@ export default function SymptomsStep() {
   };
 
   // A visit with no questions has nothing to answer; the patient moves straight on.
-  const allAnswered = questions.every(q => answers[q.id]?.value !== undefined);
+  // A written question counts as answered once it has some text in it.
+  const isAnswered = (q) =>
+    q.response_type === 'text' ? Boolean(answers[q.id]?.text?.trim()) : answers[q.id]?.value !== undefined;
+  const allAnswered = questions.every(isAnswered);
 
   if (loading || contextLoading) {
     return (
@@ -121,14 +130,24 @@ export default function SymptomsStep() {
             <Card key={q.id} className="p-5">
               <h3 className="font-bold text-lg text-ink mb-4 leading-tight">{q.question_text}</h3>
 
-              <div className="mb-4">
-                <YesNoToggle
-                  value={ans?.value}
-                  onChange={(val) => handleToggle(q.id, val)}
+              {q.response_type === 'text' ? (
+                <textarea
+                  aria-label={q.question_text}
+                  className="w-full bg-canvas rounded-lg border border-ink-soft/20 p-3 min-h-[100px] focus:outline-none focus:ring-2 focus:ring-primary"
+                  placeholder="Type your answer…"
+                  value={ans?.text ?? ''}
+                  onChange={(e) => handleText(q.id, e.target.value)}
                 />
-              </div>
+              ) : (
+                <div className="mb-4">
+                  <YesNoToggle
+                    value={ans?.value}
+                    onChange={(val) => handleToggle(q.id, val)}
+                  />
+                </div>
+              )}
 
-              {ans?.value === 'yes' && (
+              {q.response_type !== 'text' && ans?.value === 'yes' && (
                 <div className="animate-in slide-in-from-top-2 fade-in">
                   <label className="block text-sm font-medium text-ink-soft mb-2">
                     Please provide a few details:

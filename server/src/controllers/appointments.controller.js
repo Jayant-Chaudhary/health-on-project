@@ -79,6 +79,7 @@ async function attachQuestionnaire({ appointmentId, clinicianId, templateIds, ne
       .insert(
         newQuestions.map((q) => ({
           question_text: q.text,
+          response_type: q.responseType,
           clinician_id: clinicianId,
           is_active: q.saveToList,
         }))

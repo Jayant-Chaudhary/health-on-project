@@ -15,11 +15,18 @@ import {
   deleteTemplate,
 } from '../../services/clinicianService.js';
 
+/** How the patient answers a pre-visit question. */
+const QUESTION_TYPES = [
+  { value: 'yes_no', label: 'Yes / No' },
+  { value: 'text', label: 'Written answer' },
+];
+
 /**
- * One editable list: add, rename in place, remove. `extra` renders a
- * per-row control (the red-flag toggle for questions).
+ * One editable list: add, rename in place, remove. `extra` renders per-row
+ * controls (type and red flag for questions); `addControls` sits beside the
+ * add box (the question-type choice).
  */
-function EditableList({ items, onAdd, onRename, onRemove, placeholder, emptyText, extra }) {
+function EditableList({ items, onAdd, onRename, onRemove, placeholder, emptyText, extra, addControls }) {
   const [draft, setDraft] = useState('');
   const [editingId, setEditingId] = useState(null);
   const [editText, setEditText] = useState('');
@@ -106,6 +113,7 @@ function EditableList({ items, onAdd, onRename, onRemove, placeholder, emptyText
       )}
 
       <form onSubmit={add} className="flex items-center gap-2">
+        {addControls}
         <input
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
@@ -136,6 +144,7 @@ export function ClinicianChecklists() {
   const [questions, setQuestions] = useState([]);
   const [consultation, setConsultation] = useState([]);
   const [actions, setActions] = useState([]);
+  const [newQuestionType, setNewQuestionType] = useState('yes_no');
   const [loading, setLoading] = useState(true);
   const { showToast } = useToast();
 
@@ -211,9 +220,23 @@ export function ClinicianChecklists() {
                   placeholder="Add a question, e.g. Any new medication since your last visit?"
                   emptyText="No questions yet. Patients skip the questionnaire until you add some."
                   onAdd={guarded(async (text) => {
-                    const created = await createQuestion({ questionText: text });
+                    const created = await createQuestion({ questionText: text, responseType: newQuestionType });
                     setQuestions((list) => [...list, created]);
                   })}
+                  addControls={
+                    <select
+                      value={newQuestionType}
+                      onChange={(e) => setNewQuestionType(e.target.value)}
+                      aria-label="How the patient answers"
+                      className="field h-10 w-auto shrink-0"
+                    >
+                      {QUESTION_TYPES.map((type) => (
+                        <option key={type.value} value={type.value}>
+                          {type.label}
+                        </option>
+                      ))}
+                    </select>
+                  }
                   onRename={guarded(async (item, text) => {
                     const updated = await updateQuestion(item.id, { questionText: text });
                     setQuestions((list) => list.map((q) => (q.id === item.id ? updated : q)));
@@ -223,27 +246,34 @@ export function ClinicianChecklists() {
                     setQuestions((list) => list.filter((q) => q.id !== item.id));
                   })}
                   extra={(item, run) => (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        run(
-                          guarded(async () => {
-                            const updated = await updateQuestion(item.id, {
-                              isRedFlagTrigger: !item.is_red_flag_trigger,
-                            });
-                            setQuestions((list) => list.map((q) => (q.id === item.id ? updated : q)));
-                          })
-                        )
-                      }
-                      title="A “Yes” to a red-flag question is highlighted on your dashboard"
-                      className={`pill shrink-0 ${
-                        item.is_red_flag_trigger
-                          ? 'border-terracotta-border bg-terracotta-surface text-terracotta'
-                          : 'border-line bg-subcanvas text-ink-3'
-                      }`}
-                    >
-                      Red flag
-                    </button>
+                    <>
+                      <span className="pill shrink-0 border-line bg-subcanvas text-ink-2">
+                        {item.response_type === 'text' ? 'Written' : 'Yes / No'}
+                      </span>
+                      {item.response_type !== 'text' && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            run(
+                              guarded(async () => {
+                                const updated = await updateQuestion(item.id, {
+                                  isRedFlagTrigger: !item.is_red_flag_trigger,
+                                });
+                                setQuestions((list) => list.map((q) => (q.id === item.id ? updated : q)));
+                              })
+                            )
+                          }
+                          title="A “Yes” to a red-flag question is highlighted on your dashboard"
+                          className={`pill shrink-0 ${
+                            item.is_red_flag_trigger
+                              ? 'border-terracotta-border bg-terracotta-surface text-terracotta'
+                              : 'border-line bg-subcanvas text-ink-3'
+                          }`}
+                        >
+                          Red flag
+                        </button>
+                      )}
+                    </>
                   )}
                 />
               </SectionCard>

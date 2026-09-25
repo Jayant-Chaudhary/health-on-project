@@ -64,14 +64,19 @@ export function PreVisitQuestionnairePanel({ questionnaire }) {
                   >
                     {answer.shortLabel}
                   </h3>
-                  <span
-                    className={`shrink-0 rounded-full px-2 py-0.5 text-label-sm uppercase ${
-                      flag ? 'bg-terracotta text-white' : 'bg-line/70 text-ink-2'
-                    }`}
-                  >
-                    {answer.answer ? 'Yes' : 'No'}
-                  </span>
+                  {answer.responseType !== 'text' && (
+                    <span
+                      className={`shrink-0 rounded-full px-2 py-0.5 text-label-sm uppercase ${
+                        flag ? 'bg-terracotta text-white' : 'bg-line/70 text-ink-2'
+                      }`}
+                    >
+                      {answer.answer ? 'Yes' : 'No'}
+                    </span>
+                  )}
                 </div>
+                {answer.responseType === 'text' && (
+                  <p className="mt-1.5 whitespace-pre-wrap text-body-md text-ink">{answer.answerText}</p>
+                )}
                 {answer.detail && (
                   <p className={`mt-1.5 text-body-sm ${flag ? 'text-terracotta-deep' : 'text-ink-2'}`}>
                     {answer.detail}

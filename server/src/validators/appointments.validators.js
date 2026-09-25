@@ -1,4 +1,5 @@
 const { z } = require('zod');
+const { responseType } = require('./questionnaire.validators');
 
 const createAppointmentSchema = z.object({
   patientEmail: z.string().email(),
@@ -6,7 +7,8 @@ const createAppointmentSchema = z.object({
   scheduledAt: z.string().datetime(),
   questionnaireTemplateIds: z.array(z.string().uuid()).optional(),
   newQuestions: z.array(z.object({
-    text: z.string().min(1),
+    text: z.string().trim().min(1).max(500),
+    responseType: responseType.default('yes_no'),
     saveToList: z.boolean(),
   })).optional(),
 });

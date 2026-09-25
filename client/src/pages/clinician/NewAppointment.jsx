@@ -14,6 +14,8 @@ import { formatDate } from '../../utils/format.js';
 
 const EMPTY_FORM = { patientFullName: '', patientEmail: '', scheduledAt: '' };
 
+const TYPE_LABEL = { yes_no: 'Yes / No', text: 'Written answer' };
+
 /**
  * Schedule a visit and invite the patient to it.
  *
@@ -42,6 +44,7 @@ export default function NewAppointment() {
   const [newQuestions, setNewQuestions] = useState([]);
   const [draftQuestion, setDraftQuestion] = useState('');
   const [saveDraftToLibrary, setSaveDraftToLibrary] = useState(false);
+  const [draftType, setDraftType] = useState('yes_no');
 
   const [result, setResult] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -91,7 +94,10 @@ export default function NewAppointment() {
   function addDraftQuestion() {
     const text = draftQuestion.trim();
     if (!text) return;
-    setNewQuestions((current) => [...current, { key: `${Date.now()}`, text, saveToList: saveDraftToLibrary }]);
+    setNewQuestions((current) => [
+      ...current,
+      { key: `${Date.now()}`, text, responseType: draftType, saveToList: saveDraftToLibrary },
+    ]);
     setDraftQuestion('');
     setSaveDraftToLibrary(false);
   }
@@ -116,7 +122,7 @@ export default function NewAppointment() {
         ...patient,
         scheduledAt: new Date(form.scheduledAt).toISOString(),
         questionnaireTemplateIds: [...selectedQuestionIds],
-        newQuestions: newQuestions.map(({ text, saveToList }) => ({ text, saveToList })),
+        newQuestions: newQuestions.map(({ text, responseType, saveToList }) => ({ text, responseType, saveToList })),
       });
 
       setResult(created);
@@ -326,6 +332,9 @@ export default function NewAppointment() {
                         />
                         <span className="text-body-md text-ink">
                           {question.question_text}
+                          <span className="ml-2 text-label-sm uppercase text-ink-3">
+                            {TYPE_LABEL[question.response_type] ?? TYPE_LABEL.yes_no}
+                          </span>
                           {question.is_red_flag_trigger && (
                             <span className="ml-2 text-label-sm uppercase text-terracotta">red flag</span>
                           )}
@@ -343,7 +352,8 @@ export default function NewAppointment() {
                       <div className="min-w-0 flex-1">
                         <p className="text-body-md text-ink">{question.text}</p>
                         <p className="text-body-sm text-ink-3">
-                          {question.saveToList ? 'Also saved to your library' : 'Only for this patient'}
+                          {TYPE_LABEL[question.responseType]} ·{' '}
+                          {question.saveToList ? 'also saved to your library' : 'only for this patient'}
                         </p>
                       </div>
                       <button
@@ -373,7 +383,16 @@ export default function NewAppointment() {
                   aria-label="New question"
                   className="field h-10"
                 />
-                <div className="flex items-center justify-between">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <select
+                    value={draftType}
+                    onChange={(e) => setDraftType(e.target.value)}
+                    aria-label="How the patient answers"
+                    className="field h-8 w-auto"
+                  >
+                    <option value="yes_no">{TYPE_LABEL.yes_no}</option>
+                    <option value="text">{TYPE_LABEL.text}</option>
+                  </select>
                   <label className="flex cursor-pointer items-center gap-2 text-body-sm text-ink-2">
                     <input
                       type="checkbox"

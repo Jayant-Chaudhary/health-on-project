@@ -51,13 +51,15 @@ async function getTemplatesForAppointment(req, res, next) {
 
 async function createTemplate(req, res, next) {
   try {
-    const { questionText, isRedFlagTrigger = false } = req.validated;
+    const { questionText, responseType, isRedFlagTrigger = false } = req.validated;
 
     const { data, error } = await supabaseAdmin
       .from('questionnaire_templates')
       .insert({
         question_text: questionText,
-        is_red_flag_trigger: isRedFlagTrigger,
+        response_type: responseType,
+        // A red flag is a "Yes"; a written answer cannot trip one.
+        is_red_flag_trigger: responseType === 'yes_no' && isRedFlagTrigger,
         clinician_id: req.user.id,
         is_active: true,
       })
@@ -79,13 +81,16 @@ async function updateTemplate(req, res, next) {
     if (questionText !== undefined) changes.question_text = questionText;
     if (isRedFlagTrigger !== undefined) changes.is_red_flag_trigger = isRedFlagTrigger;
 
-    const { data, error } = await supabaseAdmin
+    let query = supabaseAdmin
       .from('questionnaire_templates')
       .update(changes)
       .eq('id', req.params.id)
-      .eq('clinician_id', req.user.id)
-      .select()
-      .maybeSingle();
+      .eq('clinician_id', req.user.id);
+
+    // Only a yes/no question can be a red flag.
+    if (isRedFlagTrigger) query = query.eq('response_type', 'yes_no');
+
+    const { data, error } = await query.select().maybeSingle();
 
     if (error) throw error;
     if (!data) return res.status(404).json({ error: 'Question not found' });
@@ -130,6 +135,32 @@ async function submitResponses(req, res, next) {
     const access = await assertAppointmentAccess(appointmentId, req.user);
     if (!access.ok) return res.status(access.status).json({ error: access.error });
 
+    // Answers are only accepted for the questions this visit asks, and each
+    // must be the kind its question expects.
+    const { data: asked, error: askedError } = await supabaseAdmin
+      .from('appointment_questionnaires')
+      .select('template_id, questionnaire_templates ( response_type )')
+      .eq('appointment_id', appointmentId);
+
+    if (askedError) throw askedError;
+
+    const typeById = new Map(
+      (asked || []).map((row) => [row.template_id, row.questionnaire_templates?.response_type ?? 'yes_no'])
+    );
+
+    for (const response of responses) {
+      const type = typeById.get(response.templateId);
+      if (!type) {
+        return res.status(400).json({ error: 'One of the answers is for a question this visit does not ask' });
+      }
+      const isText = response.text !== undefined;
+      if (isText !== (type === 'text')) {
+        return res.status(400).json({
+          error: type === 'text' ? 'A written question needs a written answer' : 'A yes/no question needs a yes or no',
+        });
+      }
+    }
+
     const { error: clearError } = await supabaseAdmin
       .from('questionnaire_responses')
       .delete()
@@ -142,8 +173,9 @@ async function submitResponses(req, res, next) {
       appointment_id: appointmentId,
       patient_id: req.user.id,
       template_id: r.templateId,
-      answer: r.answer,
-      detail: r.detail || null,
+      answer: r.text !== undefined ? null : r.answer,
+      answer_text: r.text ?? null,
+      detail: r.text !== undefined ? null : r.detail || null,
     }));
 
     const { data, error } = await supabaseAdmin
@@ -166,7 +198,7 @@ async function getResponsesForAppointment(req, res, next) {
 
     const { data, error } = await supabaseAdmin
       .from('questionnaire_responses')
-      .select('*, questionnaire_templates ( question_text, is_red_flag_trigger )')
+      .select('*, questionnaire_templates ( question_text, response_type, is_red_flag_trigger )')
       .eq('appointment_id', req.params.appointmentId)
       .order('created_at', { ascending: true });
 

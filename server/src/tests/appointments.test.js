@@ -98,13 +98,22 @@ describe('Appointments API', () => {
       const response = await send('post', '/api/appointments').send({
         ...validPayload,
         questionnaireTemplateIds: [templateId],
-        newQuestions: [{ text: 'Any dizziness?', saveToList: false }],
+        newQuestions: [
+          { text: 'Any dizziness?', saveToList: false },
+          { text: 'Which medicines are you taking?', responseType: 'text', saveToList: true },
+        ],
       });
 
       expect(response.status).toBe(201);
       expect(chains.questionnaire_templates[0].eq).toHaveBeenCalledWith('clinician_id', mockUser.id);
       expect(chains.questionnaire_templates[1].insert).toHaveBeenCalledWith([
-        { question_text: 'Any dizziness?', clinician_id: mockUser.id, is_active: false },
+        { question_text: 'Any dizziness?', response_type: 'yes_no', clinician_id: mockUser.id, is_active: false },
+        {
+          question_text: 'Which medicines are you taking?',
+          response_type: 'text',
+          clinician_id: mockUser.id,
+          is_active: true,
+        },
       ]);
       expect(chains.appointment_questionnaires[0].insert).toHaveBeenCalledWith([
         { appointment_id: 'appt-123', template_id: templateId },

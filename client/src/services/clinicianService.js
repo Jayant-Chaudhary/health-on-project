@@ -22,10 +22,11 @@ export async function getQuestionnaireTemplates() {
   return request('/api/questionnaire/templates');
 }
 
-export async function createQuestion({ questionText, isRedFlagTrigger = false }) {
+/** `responseType` is 'yes_no' (answered Yes/No) or 'text' (answered in writing). */
+export async function createQuestion({ questionText, responseType = 'yes_no', isRedFlagTrigger = false }) {
   return request('/api/questionnaire/templates', {
     method: 'POST',
-    body: { questionText, isRedFlagTrigger },
+    body: { questionText, responseType, isRedFlagTrigger },
   });
 }
 
@@ -103,7 +104,9 @@ export async function fetchPatientDashboard(patientId, appointmentId) {
           id: response.id,
           question: template?.question_text ?? '',
           shortLabel: template?.question_text ?? '',
+          responseType: template?.response_type ?? 'yes_no',
           answer: response.answer,
+          answerText: response.answer_text ?? '',
           isRedFlagTrigger: template?.is_red_flag_trigger ?? false,
           detail: response.detail ?? '',
         };
