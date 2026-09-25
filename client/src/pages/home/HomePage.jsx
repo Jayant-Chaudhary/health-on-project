@@ -26,9 +26,6 @@ export default function HomePage() {
   const { profile, appointments, activeAppointment, selectAppointment, loading, error } =
     usePatientContext();
 
-  const doctorName = appointment?.clinician?.full_name || appointment?.doctor?.name || 'Assigned Clinician';
-  const clinicName = appointment?.clinic?.name || 'Maternal Care Clinic';
-
   if (loading) {
     return (
       <div className="p-5 space-y-6">

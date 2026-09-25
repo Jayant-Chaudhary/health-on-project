@@ -32,7 +32,8 @@ const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: env.maxUploadBytes, files: 1 },
   fileFilter: (req, file, cb) => {
-    const allowed = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'application/pdf'];
+    // Only what the OCR router can read; anything else would be stored unreadable.
+    const allowed = ['image/png', 'image/jpeg', 'image/jpg', 'application/pdf'];
     if (allowed.includes(file.mimetype)) return cb(null, true);
     cb(new Error(`Unsupported file type: ${file.mimetype}. Upload a PDF or a photo.`));
   },

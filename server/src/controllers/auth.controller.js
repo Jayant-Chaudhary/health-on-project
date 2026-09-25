@@ -1,4 +1,5 @@
 const supabaseAdmin = require('../config/supabaseAdminClient');
+const { findAuthUserByEmail } = require('../services/authUsers.service');
 
 /**
  * @desc   Describe an invite so the landing page can show what it is for
@@ -20,10 +21,7 @@ async function getInvite(req, res, next) {
 
     // Whether the email already has an account decides what the page asks
     // for: a new password, or simply a sign-in.
-    const { data: users } = await supabaseAdmin.auth.admin.listUsers();
-    const isReturningPatient = Boolean(
-      users?.users?.some((u) => u.email?.toLowerCase() === invite.patient_email.toLowerCase())
-    );
+    const isReturningPatient = Boolean(await findAuthUserByEmail(invite.patient_email));
 
     res.json({
       patientEmail: invite.patient_email,
@@ -49,7 +47,7 @@ async function acceptInvite(req, res, next) {
 
     const { data: invite, error: inviteError } = await supabaseAdmin
       .from('appointment_invites')
-      .select('*, appointments ( id, patient_id )')
+      .select('*, appointments ( id, patient_id, status )')
       .eq('token', token)
       .single();
 
@@ -65,8 +63,7 @@ async function acceptInvite(req, res, next) {
       return res.status(410).json({ error: 'This invite has expired' });
     }
 
-    const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers();
-    let authUser = existingUsers?.users?.find((u) => u.email === invite.patient_email);
+    let authUser = await findAuthUserByEmail(invite.patient_email);
     const isReturningPatient = Boolean(authUser);
 
     if (!authUser) {
@@ -116,10 +113,16 @@ async function acceptInvite(req, res, next) {
         .eq('id', authUser.id);
     }
 
-    if (!invite.appointments.patient_id) {
+    // Linking the patient is what moves the visit out of `invited`: until
+    // then the clinician has nobody to open a record for.
+    const appointmentChanges = {};
+    if (!invite.appointments.patient_id) appointmentChanges.patient_id = authUser.id;
+    if (invite.appointments.status === 'invited') appointmentChanges.status = 'active';
+
+    if (Object.keys(appointmentChanges).length > 0) {
       await supabaseAdmin
         .from('appointments')
-        .update({ patient_id: authUser.id })
+        .update(appointmentChanges)
         .eq('id', invite.appointments.id);
     }
 

@@ -1,9 +1,14 @@
 const supabaseAdmin = require('../config/supabaseAdminClient');
+const { assertAppointmentAccess, assertRowAccessViaAppointment } = require('../services/access.service');
+const { PRESCRIPTIONS_BUCKET, createSignedUrl } = require('../services/storage.service');
 
 async function saveNotes(req, res, next) {
   try {
     const { notesText } = req.validated;
     const { appointmentId } = req.params;
+
+    const access = await assertAppointmentAccess(appointmentId, req.user);
+    if (!access.ok) return res.status(access.status).json({ error: access.error });
 
     const { data, error } = await supabaseAdmin
       .from('consultation_notes')
@@ -32,6 +37,9 @@ async function addPrescription(req, res, next) {
     const { storagePath, typedInstructions } = req.validated;
     const { appointmentId } = req.params;
 
+    const access = await assertAppointmentAccess(appointmentId, req.user);
+    if (!access.ok) return res.status(access.status).json({ error: access.error });
+
     const { data, error } = await supabaseAdmin
       .from('prescriptions')
       .insert({
@@ -55,21 +63,18 @@ async function addActionItem(req, res, next) {
     const { label } = req.validated;
     const { appointmentId } = req.params;
 
-    const { data: appointment, error: apptError } = await supabaseAdmin
-      .from('appointments')
-      .select('patient_id')
-      .eq('id', appointmentId)
-      .single();
+    const access = await assertAppointmentAccess(appointmentId, req.user);
+    if (!access.ok) return res.status(access.status).json({ error: access.error });
 
-    if (apptError || !appointment) {
-      return res.status(404).json({ error: 'Appointment not found' });
+    if (!access.appointment.patient_id) {
+      return res.status(409).json({ error: 'The patient has not accepted their invite yet' });
     }
 
     const { data, error } = await supabaseAdmin
       .from('post_visit_action_items')
       .insert({
         appointment_id: appointmentId,
-        patient_id: appointment.patient_id,
+        patient_id: access.appointment.patient_id,
         label,
       })
       .select()
@@ -87,13 +92,32 @@ async function getPostVisitSummary(req, res, next) {
   try {
     const { appointmentId } = req.params;
 
-    const [{ data: notes }, { data: prescriptions }, { data: actionItems }] = await Promise.all([
+    const access = await assertAppointmentAccess(appointmentId, req.user);
+    if (!access.ok) return res.status(access.status).json({ error: access.error });
+
+    const [notesResult, prescriptionsResult, actionItemsResult] = await Promise.all([
       supabaseAdmin.from('consultation_notes').select('*').eq('appointment_id', appointmentId).maybeSingle(),
       supabaseAdmin.from('prescriptions').select('*').eq('appointment_id', appointmentId),
-      supabaseAdmin.from('post_visit_action_items').select('*').eq('appointment_id', appointmentId),
+      supabaseAdmin
+        .from('post_visit_action_items')
+        .select('*')
+        .eq('appointment_id', appointmentId)
+        .order('created_at', { ascending: true }),
     ]);
 
-    res.json({ notes, prescriptions, actionItems });
+    for (const result of [notesResult, prescriptionsResult, actionItemsResult]) {
+      if (result.error) throw result.error;
+    }
+
+    // The bucket is private, so each prescription gets a short-lived URL.
+    const prescriptions = await Promise.all(
+      (prescriptionsResult.data || []).map(async (prescription) => ({
+        ...prescription,
+        signed_url: await createSignedUrl(PRESCRIPTIONS_BUCKET, prescription.storage_path),
+      }))
+    );
+
+    res.json({ notes: notesResult.data, prescriptions, actionItems: actionItemsResult.data || [] });
   } catch (err) {
     next(err);
   }
@@ -101,8 +125,11 @@ async function getPostVisitSummary(req, res, next) {
 
 async function toggleActionItem(req, res, next) {
   try {
-    const { isCompleted } = req.body;
+    const { isCompleted } = req.validated;
     const { itemId } = req.params;
+
+    const access = await assertRowAccessViaAppointment('post_visit_action_items', itemId, req.user);
+    if (!access.ok) return res.status(access.status).json({ error: access.error });
 
     const { data, error } = await supabaseAdmin
       .from('post_visit_action_items')

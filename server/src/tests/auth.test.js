@@ -176,6 +176,7 @@ describe('Auth API', () => {
         email: 'test@example.com',
         role: 'patient',
         fullName: 'Test User',
+        isVerified: true,
       });
     });
   });

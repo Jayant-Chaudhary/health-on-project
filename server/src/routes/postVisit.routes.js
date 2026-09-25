@@ -6,6 +6,7 @@ const {
   saveNotesSchema,
   createPrescriptionSchema,
   addActionItemSchema,
+  toggleActionItemSchema,
 } = require('../validators/postVisit.validators');
 const {
   saveNotes,
@@ -33,6 +34,6 @@ router.post(
   validateBody(addActionItemSchema),
   addActionItem
 );
-router.patch('/action-items/:itemId', toggleActionItem);
+router.patch('/action-items/:itemId', validateBody(toggleActionItemSchema), toggleActionItem);
 
 module.exports = router;

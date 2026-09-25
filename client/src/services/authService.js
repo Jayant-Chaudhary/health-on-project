@@ -2,14 +2,14 @@ import { supabase } from './supabaseClient.js';
 import { request } from './apiClient.js';
 
 export async function acceptInvite(token, password) {
-  return request('/auth/accept-invite', {
+  return request('/api/auth/accept-invite', {
     method: 'POST',
     body: { token, password },
   });
 }
 
 export async function getInviteDetails(token) {
-  return request(`/auth/invite/${token}`);
+  return request(`/api/auth/invite/${token}`);
 }
 
 export async function signUpUser(param1, param2, param3) {
@@ -159,18 +159,17 @@ export async function fetchProfile(userId) {
       return { id: userId, role: userMetaRole || 'patient' };
     }
     
-    // Flatten for convenience if needed, but keeping nested is fine too
-    if (profile.clinician_details && profile.clinician_details.length > 0) {
-      profile.clinicianDetails = profile.clinician_details[0];
-    }
-    if (profile.patient_details && profile.patient_details.length > 0) {
-      profile.patientDetails = profile.patient_details[0];
-    }
+    // One-to-one embeds come back as an object; older PostgREST sends an array.
+    const first = (value) => (Array.isArray(value) ? value[0] : value) ?? null;
+    profile.clinicianDetails = first(profile.clinician_details);
+    profile.patientDetails = first(profile.patient_details);
 
-    if (userMetaRole) {
+    // The stored role is authoritative. user_metadata is writable by the user
+    // themselves, so it may only fill in for a profile that has no role yet.
+    if (!profile.role && userMetaRole) {
       profile.role = userMetaRole;
     }
-    
+
     return profile;
   } catch (err) {
     console.error('[fetchProfile Exception]:', err);

@@ -88,9 +88,13 @@ export function InvitePatientModal({ isOpen, onClose, onInviteSent }) {
         questionnaireTemplateIds: Array.from(selectedTemplateIds),
         newQuestions: newQuestions.map(q => ({ text: q.text, saveToList: q.saveToList })),
       });
-      if (newAppointment?._devInviteLink) {
-        console.log('%c=> TEST INVITE LINK:', 'color: green; font-weight: bold; font-size: 16px;', newAppointment._devInviteLink);
-        alert(`Invite sent successfully!\n\n(Dev) Invite link: ${newAppointment._devInviteLink}`);
+      // SMTP is best-effort, so the clinic needs the link in hand either way.
+      if (newAppointment?.inviteLink) {
+        alert(
+          newAppointment.isReturningPatient
+            ? 'Appointment added to the existing patient record.'
+            : `Invite sent.\n\nIf the email does not arrive, share this link:\n${newAppointment.inviteLink}`
+        );
       }
       onInviteSent?.();
       onClose();

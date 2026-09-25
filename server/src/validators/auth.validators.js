@@ -9,7 +9,9 @@ const signupSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8),
   fullName: z.string().optional(),
-  role: z.enum(['patient', 'clinician', 'receptionist']).default('patient'),
+  // Receptionist is reserved for staff an administrator creates. A clinician
+  // may self-register but gets no clinical access until verified.
+  role: z.enum(['patient', 'clinician']).default('patient'),
   phone: z.string().optional(),
 });
 

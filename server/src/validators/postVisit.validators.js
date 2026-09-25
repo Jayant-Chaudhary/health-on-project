@@ -13,4 +13,8 @@ const addActionItemSchema = z.object({
   label: z.string().min(1),
 });
 
-module.exports = { saveNotesSchema, createPrescriptionSchema, addActionItemSchema };
+const toggleActionItemSchema = z.object({
+  isCompleted: z.boolean(),
+});
+
+module.exports = { saveNotesSchema, createPrescriptionSchema, addActionItemSchema, toggleActionItemSchema };

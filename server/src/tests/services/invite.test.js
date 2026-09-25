@@ -54,7 +54,8 @@ describe('Invite Service', () => {
         subject: 'Your appointment is confirmed — set up your account',
       }));
 
-      expect(result).toEqual(mockInvite);
+      // The link is returned so the clinician UI can hand it over if SMTP fails.
+      expect(result).toEqual({ ...mockInvite, inviteLink: expect.stringMatching(/\/invite\/[0-9a-f]{64}$/) });
     });
 
     it('should throw error if db insert fails', async () => {
@@ -80,7 +81,8 @@ describe('Invite Service', () => {
         patientEmail: 'patient@example.com',
       });
 
-      expect(result).toEqual(mockInvite);
+      // The link is returned so the clinician UI can hand it over if SMTP fails.
+      expect(result).toEqual({ ...mockInvite, inviteLink: expect.stringMatching(/\/invite\/[0-9a-f]{64}$/) });
       expect(consoleWarnSpy).toHaveBeenCalledWith(
         '[Invite Email Notice]: Could not send email via SMTP, but invite token was generated successfully:', 
         'Network timeout'

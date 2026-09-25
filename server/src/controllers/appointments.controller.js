@@ -1,5 +1,10 @@
 const supabaseAdmin = require('../config/supabaseAdminClient');
 const { createAndSendInvite } = require('../services/invite.service');
+const { findAuthUserByEmail } = require('../services/authUsers.service');
+const { assertAppointmentAccess } = require('../services/access.service');
+
+/** A patient may only report that they have checked in; the rest is the clinic's call. */
+const PATIENT_SETTABLE_STATUSES = new Set(['checked_in']);
 
 /**
  * Creates an appointment and invites the patient to it.
@@ -15,6 +20,9 @@ async function createAppointment(req, res, next) {
     const clinicianId = req.user.id;
 
     const existingPatientId = await findPatientIdByEmail(patientEmail);
+    // A returning patient is linked straight away, so there is nothing left
+    // for them to accept; a new one stays `invited` until they set a password.
+    const appointmentStatus = existingPatientId ? 'active' : 'invited';
 
     const { data: appointment, error } = await supabaseAdmin
       .from('appointments')
@@ -28,6 +36,13 @@ async function createAppointment(req, res, next) {
       .single();
 
     if (error) throw error;
+
+    await attachQuestionnaire({
+      appointmentId: appointment.id,
+      clinicianId,
+      templateIds: questionnaireTemplateIds,
+      newQuestions,
+    });
 
     const invite = await createAndSendInvite({
       appointmentId: appointment.id,
@@ -45,10 +60,44 @@ async function createAppointment(req, res, next) {
   }
 }
 
+/**
+ * Links the chosen questions to the appointment.
+ *
+ * Questions typed in for this visit become templates owned by the clinician.
+ * Ones not saved to the library are stored inactive, so they are asked on
+ * this appointment without cluttering the clinician's reusable list.
+ */
+async function attachQuestionnaire({ appointmentId, clinicianId, templateIds, newQuestions }) {
+  const ids = [...new Set(templateIds)];
+
+  if (newQuestions.length > 0) {
+    const { data: created, error } = await supabaseAdmin
+      .from('questionnaire_templates')
+      .insert(
+        newQuestions.map((q) => ({
+          question_text: q.text,
+          clinician_id: clinicianId,
+          is_active: q.saveToList,
+        }))
+      )
+      .select('id');
+
+    if (error) throw error;
+    ids.push(...(created || []).map((t) => t.id));
+  }
+
+  if (ids.length === 0) return;
+
+  const { error } = await supabaseAdmin
+    .from('appointment_questionnaires')
+    .insert(ids.map((templateId) => ({ appointment_id: appointmentId, template_id: templateId })));
+
+  if (error) throw error;
+}
+
 /** The profile id behind an email address, or null if nobody has signed up yet. */
 async function findPatientIdByEmail(email) {
-  const { data } = await supabaseAdmin.auth.admin.listUsers();
-  const user = data?.users?.find((u) => u.email?.toLowerCase() === email.toLowerCase());
+  const user = await findAuthUserByEmail(email);
   if (!user) return null;
 
   const { data: profile } = await supabaseAdmin
@@ -112,7 +161,9 @@ async function getAppointment(req, res, next) {
   try {
     const { data, error } = await supabaseAdmin
       .from('appointments')
-      .select('*')
+      .select(
+        '*, patient:profiles!appointments_patient_id_fkey ( id, full_name, phone, patient_details ( * ) ), clinician:profiles!appointments_clinician_id_fkey ( id, full_name )'
+      )
       .eq('id', req.params.id)
       .single();
 
@@ -121,7 +172,8 @@ async function getAppointment(req, res, next) {
     const isOwner = data.patient_id === req.user.id || data.clinician_id === req.user.id;
     if (!isOwner) return res.status(403).json({ error: 'Not authorized to view this appointment' });
 
-    res.json(data);
+    const [withInviteName] = await attachInviteNames([data]);
+    res.json(withInviteName);
   } catch (err) {
     next(err);
   }
@@ -130,6 +182,13 @@ async function getAppointment(req, res, next) {
 async function updateAppointmentStatus(req, res, next) {
   try {
     const { status } = req.validated;
+
+    const access = await assertAppointmentAccess(req.params.id, req.user);
+    if (!access.ok) return res.status(access.status).json({ error: access.error });
+
+    if (req.user.role !== 'clinician' && !PATIENT_SETTABLE_STATUSES.has(status)) {
+      return res.status(403).json({ error: `Patients cannot set an appointment to '${status}'` });
+    }
 
     const { data, error } = await supabaseAdmin
       .from('appointments')

@@ -63,7 +63,7 @@ export default function UploadZone({ onUpload, disabled = false }) {
           ref={fileInputRef} 
           onChange={handleChange} 
           className="hidden" 
-          accept="image/png,image/jpeg,image/webp,application/pdf"
+          accept="image/png,image/jpeg,application/pdf"
         />
         
         <Button onClick={() => fileInputRef.current?.click()} className="px-8" disabled={disabled}>

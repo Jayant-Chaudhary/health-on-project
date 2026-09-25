@@ -10,6 +10,12 @@ function roleGuard(...allowedRoles) {
       });
     }
 
+    // Anyone can sign up as a clinician; the role only carries clinical
+    // powers once an administrator has verified the registration.
+    if (req.user.role === 'clinician' && !req.user.isVerified) {
+      return res.status(403).json({ error: 'Clinician account is pending verification' });
+    }
+
     next();
   };
 }

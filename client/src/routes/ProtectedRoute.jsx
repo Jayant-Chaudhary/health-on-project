@@ -36,7 +36,9 @@ export default function ProtectedRoute({ children, allowIncomplete = false, requ
   }
 
   if (requireVerifiedClinician && activeRole === 'clinician') {
-    if (profile?.clinicianDetails?.is_verified === false) {
+    // Unverified until an administrator says otherwise — a missing details
+    // row is not a pass. The API enforces the same rule.
+    if (profile?.clinicianDetails?.is_verified !== true) {
       return <Navigate to="/verification-pending" replace />;
     }
   }

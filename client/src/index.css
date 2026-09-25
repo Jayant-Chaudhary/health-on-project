@@ -11,6 +11,36 @@
   }
 }
 
+@layer base {
+  /* Vitals and lab figures must not jump while scanning a column. */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* Shared by the clinician screens. */
+@layer components {
+  .card {
+    @apply rounded-2xl border border-line bg-surface shadow-card;
+  }
+
+  .pill {
+    @apply inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-label-sm uppercase;
+  }
+
+  .field {
+    @apply w-full rounded-xl border border-line bg-raised px-3 text-body-md text-ink
+           placeholder:text-ink-3 focus:border-cypress focus:shadow-focus focus:outline-none;
+  }
+
+  /* Slim, warm scrollbars for the two independently scrolling columns. */
+  .scroll-column {
+    @apply overflow-y-auto overscroll-contain;
+    scrollbar-width: thin;
+    scrollbar-color: #DECFC1 transparent;
+  }
+}
+
 /* Custom scrollbar for webkit */
 ::-webkit-scrollbar {
   width: 6px;

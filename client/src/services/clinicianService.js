@@ -1,11 +1,21 @@
 import { request } from './apiClient.js';
 
-/** Create an appointment and invite the patient to it. */
-export async function createAppointment({ patientEmail, patientFullName, scheduledAt }) {
+/** Create an appointment, attach its questionnaire and invite the patient. */
+export async function createAppointment({
+  patientEmail,
+  patientFullName,
+  scheduledAt,
+  questionnaireTemplateIds,
+  newQuestions,
+}) {
   return request('/api/appointments', {
     method: 'POST',
-    body: { patientEmail, patientFullName, scheduledAt },
+    body: { patientEmail, patientFullName, scheduledAt, questionnaireTemplateIds, newQuestions },
   });
+}
+
+export async function getQuestionnaireTemplates() {
+  return request('/api/questionnaire/templates');
 }
 
 /** Patients in the clinician's queue, for the sidebar and search. */
@@ -15,69 +25,55 @@ export async function fetchPatients() {
   return appointments.map((appointment) => ({
     id: appointment.patient_id,
     name: appointment.patient?.full_name ?? appointment.invited_email ?? 'Invited patient',
-    isPending: appointment.patient?.pending ?? !appointment.patient_id,
+    // Nothing to open until the patient has accepted and been linked.
+    isPending: !appointment.patient_id,
     scheduledAt: appointment.scheduled_at,
     status: appointment.status,
-    mrn: appointment.patient?.mrn ?? '',
-    gestationalDays: appointment.patient?.gestational_days ?? null,
-    acuity: appointment.acuity ?? 'optimal',
+    mrn: '',
+    gestationalDays: null,
+    acuity: 'pending',
     appointmentId: appointment.id,
   }));
 }
 
 /**
- * Everything the dashboard needs for one patient, in one call.
+ * Everything the dashboard needs for one appointment, in one call.
  * The API pieces are fetched in parallel and stitched into the view model the
  * components consume.
  */
 export async function fetchPatientDashboard(patientId, appointmentId) {
-  const labReportsPromise = patientId?.startsWith('invite-')
-    ? Promise.resolve([])
-    : request(`/lab-reports?patientId=${patientId}`);
-
-  const [appointment, responses, reports, checklist, postVisit] = await Promise.all([
+  const [appointment, responses, reports, postVisit] = await Promise.all([
     request(`/api/appointments/${appointmentId}`),
     request(`/api/questionnaire/responses/${appointmentId}`),
     // Only what the patient chose to share with this appointment.
-    request(`/api/lab-reports?patientId=${patientId}&appointmentId=${appointmentId}`),
-    request(`/api/checklist/${appointmentId}`),
+    request(`/api/lab-reports?appointmentId=${appointmentId}`),
     request(`/api/post-visit/${appointmentId}`),
   ]);
 
-  const patientData = appointment.patient || {
-    id: patientId,
-    name: appointment.appointment_invites?.[0]?.patient_email || appointment.appointment_invites?.patient_email || 'Invited Patient',
-    acuity: 'optimal',
-    mrn: 'Pending Registration',
-    age: '—',
-    gravida: '—',
-    para: '—',
-    bloodType: '—',
-    gestationalDays: null,
-    dueDate: null,
-  };
-
   return {
-    patient: patientData,
+    patient: buildPatient(appointment, patientId),
     appointment,
     questionnaire: {
       submittedAt: responses[0]?.created_at ?? null,
-      answers: responses.map((response) => ({
-        id: response.id,
-        question: response.template?.question_text ?? '',
-        shortLabel: response.template?.short_label ?? response.template?.question_text ?? '',
-        answer: response.answer,
-        isRedFlagTrigger: response.template?.is_red_flag_trigger ?? false,
-        detail: response.detail ?? '',
-      })),
+      answers: responses.map((response) => {
+        const template = response.questionnaire_templates;
+        return {
+          id: response.id,
+          question: template?.question_text ?? '',
+          shortLabel: template?.question_text ?? '',
+          answer: response.answer,
+          isRedFlagTrigger: template?.is_red_flag_trigger ?? false,
+          detail: response.detail ?? '',
+        };
+      }),
     },
     metrics: buildMetrics(reports),
     triageAlerts: buildTriageAlerts(reports),
     notes: { text: postVisit?.notes?.notes_text ?? '', updatedAt: postVisit?.notes?.updated_at ?? null },
-    checklist: (checklist ?? []).map((item) => ({
+    // The clinician's checklist is the patient's post-visit "next steps".
+    checklist: (postVisit?.actionItems ?? []).map((item) => ({
       id: item.id,
       label: item.label,
-      category: item.category ?? null,
       isCompleted: item.is_completed,
     })),
     notifications: [],
@@ -89,7 +85,7 @@ export async function fetchMetricTrend(standardKey, patientId) {
   const rows = await request(`/api/lab-reports/trend/${standardKey}?patientId=${patientId}`);
 
   return rows.map((row) => ({
-    date: row.created_at,
+    date: row.lab_reports?.report_date ?? row.created_at,
     value: Number(row.reviewed_value ?? row.parsed_value),
   }));
 }
@@ -98,8 +94,8 @@ export async function saveConsultancyNotes(appointmentId, notesText) {
   return request(`/api/post-visit/${appointmentId}/notes`, { method: 'PUT', body: { notesText } });
 }
 
-export async function toggleChecklistItem(itemId, isCompleted) {
-  return request(`/api/checklist/items/${itemId}`, { method: 'PATCH', body: { isCompleted } });
+export async function toggleActionItem(itemId, isCompleted) {
+  return request(`/api/post-visit/action-items/${itemId}`, { method: 'PATCH', body: { isCompleted } });
 }
 
 export async function addActionItem(appointmentId, label) {
@@ -110,22 +106,63 @@ export async function addActionItem(appointmentId, label) {
 export async function resolveTriageAlert(metricId, { standardKey, reviewedValue }) {
   return request(`/api/lab-reports/metrics/${metricId}/review`, {
     method: 'PATCH',
-    body: { standardKey, reviewedValue },
+    body: {
+      reviewedValue,
+      ...(standardKey ? { standardKey } : {}),
+    },
   });
 }
-
-export async function createAppointment(payload) {
-  return request('/appointments', { method: 'POST', body: payload });
-}
-
-export async function getQuestionnaireTemplates() {
-  return request('/questionnaire/templates');
-}
-
 
 // ---------------------------------------------------------------------------
 // API → view-model helpers
 // ---------------------------------------------------------------------------
+
+const DAY_MS = 86_400_000;
+const GESTATION_DAYS = 280;
+
+function first(value) {
+  return (Array.isArray(value) ? value[0] : value) ?? null;
+}
+
+function ageFrom(dateOfBirth) {
+  if (!dateOfBirth) return '—';
+  const dob = new Date(dateOfBirth);
+  const now = new Date();
+  let age = now.getFullYear() - dob.getFullYear();
+  const beforeBirthday =
+    now.getMonth() < dob.getMonth() || (now.getMonth() === dob.getMonth() && now.getDate() < dob.getDate());
+  if (beforeBirthday) age -= 1;
+  return Number.isNaN(age) ? '—' : age;
+}
+
+/** Same derivation as the API's profile controller: counted back from the due date. */
+function gestationalDaysFrom(dueDate) {
+  if (!dueDate) return null;
+  const due = new Date(dueDate).getTime();
+  if (Number.isNaN(due)) return null;
+  const elapsed = GESTATION_DAYS - Math.round((due - Date.now()) / DAY_MS);
+  return elapsed >= 0 && elapsed <= GESTATION_DAYS + 28 ? elapsed : null;
+}
+
+/** The header card's patient, from the appointment's embedded profile. */
+function buildPatient(appointment, patientId) {
+  const profile = appointment.patient;
+  const details = first(profile?.patient_details);
+
+  return {
+    id: profile?.id ?? patientId,
+    name: profile?.full_name ?? appointment.invited_email ?? 'Invited patient',
+    acuity: 'pending',
+    acuityLabel: 'Pre-visit',
+    mrn: profile?.id ? `ID ${profile.id.slice(0, 8)}` : 'Pending registration',
+    age: ageFrom(details?.date_of_birth),
+    gravida: details?.gravida ?? '—',
+    para: details?.para ?? '—',
+    bloodType: details?.blood_type ?? '—',
+    gestationalDays: gestationalDaysFrom(details?.due_date),
+    dueDate: details?.due_date ?? null,
+  };
+}
 
 /** Latest value per standard_key, with the full series attached for charting. */
 function buildMetrics(reports = []) {
@@ -138,14 +175,17 @@ function buildMetrics(reports = []) {
       const value = metric.reviewed_value ?? metric.parsed_value;
       const entry = byKey.get(metric.standard_key) ?? {
         standardKey: metric.standard_key,
-        name: metric.display_name ?? metric.raw_key,
+        name: metric.metric_dictionary?.display_name ?? metric.raw_key,
         source: report.source_name ?? 'Lab report',
         unit: metric.unit_standard ?? metric.unit_raw ?? '',
         reference: metric.reference_range ?? '—',
         history: [],
       };
 
-      entry.history.push({ date: report.report_date ?? report.uploaded_at, value: Number(value) });
+      // An unreadable value stays out of the series rather than charting as 0.
+      if (value != null) {
+        entry.history.push({ date: report.report_date ?? report.uploaded_at, value: Number(value) });
+      }
       byKey.set(metric.standard_key, entry);
     }
   }
@@ -172,7 +212,7 @@ function buildTriageAlerts(reports = []) {
         labReportId: report.id,
         metricId: metric.id,
         standardKey: metric.standard_key ?? '',
-        label: metric.display_name ?? metric.raw_key,
+        label: metric.metric_dictionary?.display_name ?? metric.raw_key,
         reportName: report.source_name ?? 'Uploaded lab report',
         reportDate: report.report_date ?? report.uploaded_at,
         confidence: metric.confidence_score ?? null,

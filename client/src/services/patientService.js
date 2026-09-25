@@ -70,4 +70,12 @@ export const patientService = {
   async getVisitSummary(appointmentId) {
     return request(`/api/post-visit/${appointmentId}`);
   },
+
+  /** Ticks off (or un-ticks) one of the clinician's post-visit next steps. */
+  async toggleNextStep(itemId, isCompleted) {
+    return request(`/api/post-visit/action-items/${itemId}`, {
+      method: 'PATCH',
+      body: { isCompleted },
+    });
+  },
 };

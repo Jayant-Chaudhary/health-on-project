@@ -41,13 +41,17 @@ export function OcrTriageAlert({ alerts = [], onResolve }) {
 function AlertItem({ alert, onResolve }) {
   const [value, setValue] = useState('');
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
 
   async function submit(event) {
     event.preventDefault();
     if (!value.trim()) return;
     setSaving(true);
+    setError(null);
     try {
       await onResolve?.(alert, value.trim());
+    } catch (err) {
+      setError(err.message || 'Could not save that value.');
     } finally {
       setSaving(false);
     }
@@ -93,6 +97,7 @@ function AlertItem({ alert, onResolve }) {
           {saving ? 'Saving…' : 'Resolve'}
         </Button>
       </form>
+      {error && <p className="mt-1.5 text-body-sm text-terracotta">{error}</p>}
     </li>
   );
 }

@@ -2,6 +2,7 @@ const request = require('supertest');
 const app = require('../app');
 const supabaseAdmin = require('../config/supabaseAdminClient');
 const { createAndSendInvite } = require('../services/invite.service');
+const { ok, mockTables, profileRow } = require('./helpers/supabaseMock');
 
 jest.mock('../config/supabaseAdminClient', () => ({
   auth: {
@@ -16,50 +17,21 @@ jest.mock('../services/invite.service', () => ({
 }));
 
 describe('Appointments API', () => {
-  const mockUser = {
-    id: 'user-123',
-    email: 'test@example.com',
-  };
-  const mockProfile = {
-    role: 'clinician',
-    full_name: 'Dr. Test',
-  };
-
+  const mockUser = { id: 'user-123', email: 'test@example.com' };
   const mockToken = 'valid-token';
+
+  const send = (method, path) =>
+    request(app)[method](path).set('Authorization', `Bearer ${mockToken}`);
 
   beforeEach(() => {
     jest.clearAllMocks();
 
-    // Default mock for authGuard
-    supabaseAdmin.auth.getUser.mockResolvedValue({
-      data: { user: mockUser },
-      error: null,
-    });
+    supabaseAdmin.auth.getUser.mockResolvedValue({ data: { user: mockUser }, error: null });
 
     // No existing account for the invited email unless a test says otherwise.
     supabaseAdmin.auth.admin.listUsers.mockResolvedValue({ data: { users: [] }, error: null });
     createAndSendInvite.mockResolvedValue({ id: 'invite-1', inviteLink: 'http://localhost:5173/invite/tok' });
   });
-
-  const setupProfileMock = (role = 'clinician') => {
-    supabaseAdmin.from.mockImplementation((table) => {
-      if (table === 'profiles') {
-        return {
-          select: jest.fn().mockReturnThis(),
-          eq: jest.fn().mockReturnThis(),
-          single: jest.fn().mockResolvedValue({ data: { ...mockProfile, role }, error: null }),
-        };
-      }
-      return {
-        insert: jest.fn().mockReturnThis(),
-        select: jest.fn().mockReturnThis(),
-        single: jest.fn().mockResolvedValue({ data: {}, error: null }),
-        eq: jest.fn().mockReturnThis(),
-        order: jest.fn().mockReturnThis(),
-        update: jest.fn().mockReturnThis(),
-      };
-    });
-  };
 
   describe('POST /appointments', () => {
     const validPayload = {
@@ -68,33 +40,24 @@ describe('Appointments API', () => {
       scheduledAt: '2026-10-01T10:00:00Z',
     };
 
-    it('should create an appointment if user is clinician', async () => {
+    it('should create an invited appointment for a new patient', async () => {
       const mockCreatedAppointment = { id: 'appt-123', status: 'invited' };
-      
-      supabaseAdmin.from.mockImplementation((table) => {
-        if (table === 'profiles') {
-          return {
-            select: jest.fn().mockReturnThis(),
-            eq: jest.fn().mockReturnThis(),
-            single: jest.fn().mockResolvedValue({ data: mockProfile, error: null }),
-          };
-        }
-        if (table === 'appointments') {
-          return {
-            insert: jest.fn().mockReturnThis(),
-            select: jest.fn().mockReturnThis(),
-            single: jest.fn().mockResolvedValue({ data: mockCreatedAppointment, error: null }),
-          };
-        }
+      const chains = mockTables(supabaseAdmin, {
+        profiles: profileRow('clinician'),
+        appointments: ok(mockCreatedAppointment),
       });
 
-      const response = await request(app)
-        .post('/api/appointments')
-        .set('Authorization', `Bearer ${mockToken}`)
-        .send(validPayload);
+      const response = await send('post', '/api/appointments').send(validPayload);
 
       expect(response.status).toBe(201);
-      expect(response.body).toMatchObject({ ...mockCreatedAppointment, isReturningPatient: false });
+      expect(response.body).toMatchObject({
+        ...mockCreatedAppointment,
+        isReturningPatient: false,
+        inviteLink: 'http://localhost:5173/invite/tok',
+      });
+      expect(chains.appointments[0].insert).toHaveBeenCalledWith(
+        expect.objectContaining({ clinician_id: mockUser.id, patient_id: null, status: 'invited' })
+      );
       expect(createAndSendInvite).toHaveBeenCalledWith({
         appointmentId: 'appt-123',
         patientEmail: validPayload.patientEmail,
@@ -102,24 +65,72 @@ describe('Appointments API', () => {
       });
     });
 
-    it('should return 403 if user is not a clinician', async () => {
-      setupProfileMock('patient');
+    it('should link a returning patient and mark the appointment active', async () => {
+      supabaseAdmin.auth.admin.listUsers.mockResolvedValue({
+        data: { users: [{ id: 'patient-9', email: 'Patient@Example.com' }] },
+        error: null,
+      });
+      const chains = mockTables(supabaseAdmin, {
+        // authGuard's read, then the returning patient's profile lookup.
+        profiles: [profileRow('clinician'), ok({ id: 'patient-9', role: 'patient' })],
+        appointments: ok({ id: 'appt-7', status: 'active' }),
+      });
 
-      const response = await request(app)
-        .post('/api/appointments')
-        .set('Authorization', `Bearer ${mockToken}`)
-        .send(validPayload);
+      const response = await send('post', '/api/appointments').send(validPayload);
+
+      expect(response.status).toBe(201);
+      expect(response.body.isReturningPatient).toBe(true);
+      expect(chains.appointments[0].insert).toHaveBeenCalledWith(
+        expect.objectContaining({ patient_id: 'patient-9', status: 'active' })
+      );
+    });
+
+    it('should attach chosen and newly written questions to the appointment', async () => {
+      const templateId = '11111111-1111-4111-8111-111111111111';
+      const chains = mockTables(supabaseAdmin, {
+        profiles: profileRow('clinician'),
+        appointments: ok({ id: 'appt-123', status: 'invited' }),
+        questionnaire_templates: ok([{ id: 'new-template' }]),
+        appointment_questionnaires: ok(null),
+      });
+
+      const response = await send('post', '/api/appointments').send({
+        ...validPayload,
+        questionnaireTemplateIds: [templateId],
+        newQuestions: [{ text: 'Any dizziness?', saveToList: false }],
+      });
+
+      expect(response.status).toBe(201);
+      expect(chains.questionnaire_templates[0].insert).toHaveBeenCalledWith([
+        { question_text: 'Any dizziness?', clinician_id: mockUser.id, is_active: false },
+      ]);
+      expect(chains.appointment_questionnaires[0].insert).toHaveBeenCalledWith([
+        { appointment_id: 'appt-123', template_id: templateId },
+        { appointment_id: 'appt-123', template_id: 'new-template' },
+      ]);
+    });
+
+    it('should return 403 if user is not a clinician', async () => {
+      mockTables(supabaseAdmin, { profiles: profileRow('patient') });
+
+      const response = await send('post', '/api/appointments').send(validPayload);
 
       expect(response.status).toBe(403);
     });
 
-    it('should return 400 for invalid payload', async () => {
-      setupProfileMock('clinician');
+    it('should return 403 if the clinician is not verified yet', async () => {
+      mockTables(supabaseAdmin, { profiles: profileRow('clinician', { verified: false }) });
 
-      const response = await request(app)
-        .post('/api/appointments')
-        .set('Authorization', `Bearer ${mockToken}`)
-        .send({ patientEmail: 'not-an-email' }); // Missing required fields and bad email
+      const response = await send('post', '/api/appointments').send(validPayload);
+
+      expect(response.status).toBe(403);
+      expect(response.body.error).toMatch(/pending verification/);
+    });
+
+    it('should return 400 for invalid payload', async () => {
+      mockTables(supabaseAdmin, { profiles: profileRow('clinician') });
+
+      const response = await send('post', '/api/appointments').send({ patientEmail: 'not-an-email' });
 
       expect(response.status).toBe(400);
     });
@@ -127,35 +138,13 @@ describe('Appointments API', () => {
 
   describe('GET /appointments', () => {
     it('should list appointments for the user', async () => {
-      setupProfileMock('patient');
-      const mockAppointments = [{ id: 'appt-1' }];
-
-      supabaseAdmin.from.mockImplementation((table) => {
-        if (table === 'profiles') {
-          return {
-            select: jest.fn().mockReturnThis(),
-            eq: jest.fn().mockReturnThis(),
-            single: jest.fn().mockResolvedValue({ data: { ...mockProfile, role: 'patient' }, error: null }),
-          };
-        }
-        if (table === 'appointments') {
-          return {
-            select: jest.fn().mockReturnThis(),
-            eq: jest.fn().mockReturnThis(),
-            order: jest.fn().mockResolvedValue({ data: mockAppointments, error: null }),
-          };
-        }
-        if (table === 'appointment_invites') {
-          return {
-            select: jest.fn().mockReturnThis(),
-            in: jest.fn().mockResolvedValue({ data: [], error: null }),
-          };
-        }
+      mockTables(supabaseAdmin, {
+        profiles: profileRow('patient'),
+        appointments: ok([{ id: 'appt-1' }]),
+        appointment_invites: ok([]),
       });
 
-      const response = await request(app)
-        .get('/api/appointments')
-        .set('Authorization', `Bearer ${mockToken}`);
+      const response = await send('get', '/api/appointments');
 
       expect(response.status).toBe(200);
       // Appointments now carry the patient's name (or the invited name, for
@@ -167,120 +156,89 @@ describe('Appointments API', () => {
 
   describe('GET /appointments/:id', () => {
     it('should return appointment if user is owner', async () => {
-      setupProfileMock('patient');
-      const mockAppointment = { id: 'appt-1', patient_id: mockUser.id };
-
-      supabaseAdmin.from.mockImplementation((table) => {
-        if (table === 'profiles') {
-          return {
-            select: jest.fn().mockReturnThis(),
-            eq: jest.fn().mockReturnThis(),
-            single: jest.fn().mockResolvedValue({ data: { ...mockProfile, role: 'patient' }, error: null }),
-          };
-        }
-        if (table === 'appointments') {
-          return {
-            select: jest.fn().mockReturnThis(),
-            eq: jest.fn().mockReturnThis(),
-            single: jest.fn().mockResolvedValue({ data: mockAppointment, error: null }),
-          };
-        }
+      const mockAppointment = { id: 'appt-1', patient_id: mockUser.id, patient: { id: mockUser.id } };
+      mockTables(supabaseAdmin, {
+        profiles: profileRow('patient'),
+        appointments: ok(mockAppointment),
       });
 
-      const response = await request(app)
-        .get('/api/appointments/appt-1')
-        .set('Authorization', `Bearer ${mockToken}`);
+      const response = await send('get', '/api/appointments/appt-1');
 
       expect(response.status).toBe(200);
       expect(response.body).toEqual(mockAppointment);
     });
 
     it('should return 403 if user is not owner', async () => {
-      setupProfileMock('patient');
-      const mockAppointment = { id: 'appt-1', patient_id: 'someone-else' };
-
-      supabaseAdmin.from.mockImplementation((table) => {
-        if (table === 'profiles') {
-          return {
-            select: jest.fn().mockReturnThis(),
-            eq: jest.fn().mockReturnThis(),
-            single: jest.fn().mockResolvedValue({ data: { ...mockProfile, role: 'patient' }, error: null }),
-          };
-        }
-        if (table === 'appointments') {
-          return {
-            select: jest.fn().mockReturnThis(),
-            eq: jest.fn().mockReturnThis(),
-            single: jest.fn().mockResolvedValue({ data: mockAppointment, error: null }),
-          };
-        }
+      mockTables(supabaseAdmin, {
+        profiles: profileRow('patient'),
+        appointments: ok({ id: 'appt-1', patient_id: 'someone-else' }),
       });
 
-      const response = await request(app)
-        .get('/api/appointments/appt-1')
-        .set('Authorization', `Bearer ${mockToken}`);
+      const response = await send('get', '/api/appointments/appt-1');
 
       expect(response.status).toBe(403);
     });
 
     it('should return 404 if not found', async () => {
-      setupProfileMock('patient');
-
-      supabaseAdmin.from.mockImplementation((table) => {
-        if (table === 'profiles') {
-          return {
-            select: jest.fn().mockReturnThis(),
-            eq: jest.fn().mockReturnThis(),
-            single: jest.fn().mockResolvedValue({ data: { ...mockProfile, role: 'patient' }, error: null }),
-          };
-        }
-        if (table === 'appointments') {
-          return {
-            select: jest.fn().mockReturnThis(),
-            eq: jest.fn().mockReturnThis(),
-            single: jest.fn().mockResolvedValue({ data: null, error: null }),
-          };
-        }
+      mockTables(supabaseAdmin, {
+        profiles: profileRow('patient'),
+        appointments: ok(null),
       });
 
-      const response = await request(app)
-        .get('/api/appointments/non-existent')
-        .set('Authorization', `Bearer ${mockToken}`);
+      const response = await send('get', '/api/appointments/non-existent');
 
       expect(response.status).toBe(404);
     });
   });
 
   describe('PATCH /appointments/:id/status', () => {
-    it('should update appointment status if user is clinician', async () => {
-      setupProfileMock('clinician');
-      const mockUpdated = { id: 'appt-1', status: 'confirmed' };
+    const ownAppointment = { id: 'appt-1', patient_id: 'patient-1', clinician_id: mockUser.id };
 
-      supabaseAdmin.from.mockImplementation((table) => {
-        if (table === 'profiles') {
-          return {
-            select: jest.fn().mockReturnThis(),
-            eq: jest.fn().mockReturnThis(),
-            single: jest.fn().mockResolvedValue({ data: mockProfile, error: null }),
-          };
-        }
-        if (table === 'appointments') {
-          return {
-            update: jest.fn().mockReturnThis(),
-            eq: jest.fn().mockReturnThis(),
-            select: jest.fn().mockReturnThis(),
-            single: jest.fn().mockResolvedValue({ data: mockUpdated, error: null }),
-          };
-        }
+    it("should update the status of the clinician's own appointment", async () => {
+      const mockUpdated = { id: 'appt-1', status: 'completed' };
+      mockTables(supabaseAdmin, {
+        profiles: profileRow('clinician'),
+        // The access check, then the update.
+        appointments: [ok(ownAppointment), ok(mockUpdated)],
       });
 
-      const response = await request(app)
-        .patch('/api/appointments/appt-1/status')
-        .set('Authorization', `Bearer ${mockToken}`)
-        .send({ status: 'completed' });
+      const response = await send('patch', '/api/appointments/appt-1/status').send({ status: 'completed' });
 
       expect(response.status).toBe(200);
       expect(response.body).toEqual(mockUpdated);
+    });
+
+    it("should return 403 for another clinician's appointment", async () => {
+      mockTables(supabaseAdmin, {
+        profiles: profileRow('clinician'),
+        appointments: ok({ ...ownAppointment, clinician_id: 'other-clinician' }),
+      });
+
+      const response = await send('patch', '/api/appointments/appt-1/status').send({ status: 'completed' });
+
+      expect(response.status).toBe(403);
+    });
+
+    it('should let a patient check in to their own appointment', async () => {
+      mockTables(supabaseAdmin, {
+        profiles: profileRow('patient'),
+        appointments: [ok({ ...ownAppointment, patient_id: mockUser.id }), ok({ id: 'appt-1', status: 'checked_in' })],
+      });
+
+      const response = await send('patch', '/api/appointments/appt-1/status').send({ status: 'checked_in' });
+
+      expect(response.status).toBe(200);
+    });
+
+    it('should not let a patient mark their appointment completed', async () => {
+      mockTables(supabaseAdmin, {
+        profiles: profileRow('patient'),
+        appointments: ok({ ...ownAppointment, patient_id: mockUser.id }),
+      });
+
+      const response = await send('patch', '/api/appointments/appt-1/status').send({ status: 'completed' });
+
+      expect(response.status).toBe(403);
     });
   });
 });

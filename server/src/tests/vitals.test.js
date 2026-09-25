@@ -1,6 +1,7 @@
 const request = require('supertest');
 const app = require('../app');
 const supabaseAdmin = require('../config/supabaseAdminClient');
+const { ok, mockTables, profileRow } = require('./helpers/supabaseMock');
 
 jest.mock('../config/supabaseAdminClient', () => ({
   auth: {
@@ -125,19 +126,13 @@ describe('Vitals API', () => {
       expect(response.body).toEqual(mockVitals);
     });
 
-    it('should list vitals for a specific patient if requester is clinician', async () => {
+    it('should list vitals for a patient the clinician is treating', async () => {
       setupAuthMock(mockClinician, mockClinicianProfile);
       const mockVitals = [{ id: 'vital-1', metric_key: 'weight', value: 70 }];
-
-      supabaseAdmin.from.mockImplementation((table) => {
-        if (table === 'profiles') return { select: jest.fn().mockReturnThis(), eq: jest.fn().mockReturnThis(), single: jest.fn().mockResolvedValue({ data: mockClinicianProfile, error: null }) };
-        if (table === 'vitals_logs') {
-          return {
-            select: jest.fn().mockReturnThis(),
-            eq: jest.fn().mockReturnThis(),
-            order: jest.fn().mockResolvedValue({ data: mockVitals, error: null }),
-          };
-        }
+      mockTables(supabaseAdmin, {
+        profiles: profileRow('clinician'),
+        appointments: ok([{ id: 'appt-1' }]),
+        vitals_logs: ok(mockVitals),
       });
 
       const response = await request(app)
@@ -146,6 +141,32 @@ describe('Vitals API', () => {
 
       expect(response.status).toBe(200);
       expect(response.body).toEqual(mockVitals);
+    });
+
+    it('should return 403 for a patient the clinician has no appointment with', async () => {
+      setupAuthMock(mockClinician, mockClinicianProfile);
+      mockTables(supabaseAdmin, {
+        profiles: profileRow('clinician'),
+        appointments: ok([]),
+      });
+
+      const response = await request(app)
+        .get('/api/vitals?patientId=stranger-1')
+        .set('Authorization', `Bearer ${mockToken}`);
+
+      expect(response.status).toBe(403);
+    });
+
+    it('should not let a clinician log vitals', async () => {
+      setupAuthMock(mockClinician, mockClinicianProfile);
+      mockTables(supabaseAdmin, { profiles: profileRow('clinician') });
+
+      const response = await request(app)
+        .post('/api/vitals')
+        .set('Authorization', `Bearer ${mockToken}`)
+        .send({ metricKey: 'weight', value: 70 });
+
+      expect(response.status).toBe(403);
     });
   });
 });

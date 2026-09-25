@@ -8,6 +8,48 @@ const {
   createSignedUrl,
   removeFile,
 } = require('../services/storage.service');
+const {
+  assertAppointmentAccess,
+  clinicianHasPatient,
+  resolvePatientScope,
+} = require('../services/access.service');
+
+/** Metric rows carry the dictionary's display name so the UI need not guess one. */
+const METRIC_COLUMNS = '*, metric_dictionary ( display_name )';
+
+/**
+ * An appointment a report may be attached to: the caller must be part of it,
+ * and it must be the report's patient's appointment.
+ */
+async function assertAppointmentForPatient(appointmentId, patientId, user) {
+  const access = await assertAppointmentAccess(appointmentId, user);
+  if (!access.ok) return access;
+  if (access.appointment.patient_id !== patientId) {
+    return { ok: false, status: 403, error: 'That appointment belongs to a different patient' };
+  }
+  return access;
+}
+
+/** Ids of the reports a patient has shared with any of this clinician's appointments. */
+async function reportIdsSharedWithClinician(clinicianId, patientId) {
+  const { data: appointments, error } = await supabaseAdmin
+    .from('appointments')
+    .select('id')
+    .eq('clinician_id', clinicianId)
+    .eq('patient_id', patientId);
+  if (error) throw error;
+
+  const appointmentIds = (appointments || []).map((a) => a.id);
+  if (appointmentIds.length === 0) return [];
+
+  const { data: shares, error: shareError } = await supabaseAdmin
+    .from('appointment_lab_reports')
+    .select('lab_report_id')
+    .in('appointment_id', appointmentIds);
+  if (shareError) throw shareError;
+
+  return [...new Set((shares || []).map((row) => row.lab_report_id))];
+}
 
 /**
  * Writes one report and its standardized metrics.
@@ -39,7 +81,7 @@ async function persistReport({ patientId, appointmentId, storagePath, reportDate
     const { data: insertedMetrics, error: metricsError } = await supabaseAdmin
       .from('lab_report_metrics')
       .insert(rows)
-      .select();
+      .select(METRIC_COLUMNS);
 
     if (metricsError) throw metricsError;
     savedMetrics = insertedMetrics;
@@ -72,9 +114,14 @@ async function uploadReport(req, res, next) {
       return res.status(400).json({ error: 'No file uploaded' });
     }
 
-    const patientId = req.user.role === 'clinician' ? req.body.patientId : req.user.id;
-    if (!patientId) {
-      return res.status(400).json({ error: 'patientId is required' });
+    const scope = await resolvePatientScope(req);
+    if (!scope.ok) return res.status(scope.status).json({ error: scope.error });
+    const { patientId } = scope;
+
+    const appointmentId = req.body.appointmentId || null;
+    if (appointmentId) {
+      const access = await assertAppointmentForPatient(appointmentId, patientId, req.user);
+      if (!access.ok) return res.status(access.status).json({ error: access.error });
     }
 
     storagePath = await uploadFile({
@@ -93,7 +140,7 @@ async function uploadReport(req, res, next) {
 
     const result = await persistReport({
       patientId,
-      appointmentId: req.body.appointmentId || null,
+      appointmentId,
       storagePath,
       reportDate: extracted.reportDate,
       ocrStatus: extracted.ocrStatus,
@@ -122,7 +169,7 @@ async function shareReportWithAppointment(req, res, next) {
     const owned = await assertReportOwnedBy(reportId, req.user);
     if (!owned.ok) return res.status(owned.status).json({ error: owned.error });
 
-    const appointment = await assertAppointmentOwnedBy(appointmentId, req.user);
+    const appointment = await assertAppointmentForPatient(appointmentId, owned.report.patient_id, req.user);
     if (!appointment.ok) return res.status(appointment.status).json({ error: appointment.error });
 
     const { error } = await supabaseAdmin
@@ -176,7 +223,10 @@ async function deleteReport(req, res, next) {
   }
 }
 
-/** A patient may only touch their own reports; a clinician may read any. */
+/**
+ * Sharing and deleting are the patient's decisions about their own library,
+ * so only the patient who uploaded a report may change it.
+ */
 async function assertReportOwnedBy(reportId, user) {
   const { data: report, error } = await supabaseAdmin
     .from('lab_reports')
@@ -186,30 +236,20 @@ async function assertReportOwnedBy(reportId, user) {
 
   if (error) throw error;
   if (!report) return { ok: false, status: 404, error: 'Report not found' };
-  if (user.role !== 'clinician' && report.patient_id !== user.id) {
+  if (report.patient_id !== user.id) {
     return { ok: false, status: 403, error: 'Not authorized for this report' };
   }
   return { ok: true, report };
 }
 
-async function assertAppointmentOwnedBy(appointmentId, user) {
-  const { data: appointment, error } = await supabaseAdmin
-    .from('appointments')
-    .select('id, patient_id, clinician_id')
-    .eq('id', appointmentId)
-    .maybeSingle();
-
-  if (error) throw error;
-  if (!appointment) return { ok: false, status: 404, error: 'Appointment not found' };
-
-  const isOwner = appointment.patient_id === user.id || appointment.clinician_id === user.id;
-  if (!isOwner) return { ok: false, status: 403, error: 'Not authorized for this appointment' };
-  return { ok: true, appointment };
-}
-
 async function ingestReport(req, res, next) {
   try {
     const { appointmentId, storagePath, reportDate, metrics, ocrStatus } = req.validated;
+
+    if (appointmentId) {
+      const access = await assertAppointmentForPatient(appointmentId, req.user.id, req.user);
+      if (!access.ok) return res.status(access.status).json({ error: access.error });
+    }
 
     const result = await persistReport({
       patientId: req.user.id,
@@ -233,15 +273,24 @@ async function ingestReport(req, res, next) {
  *
  * A clinician reading an appointment sees only what the patient chose to
  * share with it — that choice is the whole point of the join table, so it is
- * enforced here rather than left to the caller.
+ * enforced here rather than left to the caller. A clinician therefore always
+ * reads through an appointment of their own, never the whole library.
  */
 async function listReportsForPatient(req, res, next) {
   try {
-    const patientId = req.user.role === 'clinician' ? req.query.patientId : req.user.id;
     const { appointmentId } = req.query;
+    const isClinician = req.user.role === 'clinician';
 
-    if (!patientId) {
-      return res.status(400).json({ error: 'patientId is required' });
+    if (isClinician && !appointmentId) {
+      return res.status(400).json({ error: 'appointmentId is required' });
+    }
+
+    let patientId = req.user.id;
+    if (appointmentId) {
+      const access = await assertAppointmentAccess(appointmentId, req.user);
+      if (!access.ok) return res.status(access.status).json({ error: access.error });
+      if (isClinician) patientId = access.appointment.patient_id;
+      if (!patientId) return res.json([]);
     }
 
     let sharedReportIds = null;
@@ -259,7 +308,7 @@ async function listReportsForPatient(req, res, next) {
 
     let query = supabaseAdmin
       .from('lab_reports')
-      .select('*, lab_report_metrics ( * ), appointment_lab_reports ( appointment_id )')
+      .select(`*, lab_report_metrics ( ${METRIC_COLUMNS} ), appointment_lab_reports ( appointment_id )`)
       .eq('patient_id', patientId)
       .order('uploaded_at', { ascending: false });
 
@@ -286,20 +335,28 @@ async function listReportsForPatient(req, res, next) {
 async function getMetricTrend(req, res, next) {
   try {
     const { standardKey } = req.params;
-    const patientId = req.user.role === 'clinician' ? req.query.patientId : req.user.id;
 
-    if (!patientId) {
-      return res.status(400).json({ error: 'patientId is required' });
-    }
+    const scope = await resolvePatientScope(req);
+    if (!scope.ok) return res.status(scope.status).json({ error: scope.error });
+    const { patientId } = scope;
 
-    const { data, error } = await supabaseAdmin
+    let query = supabaseAdmin
       .from('lab_report_metrics')
       .select(
-        'parsed_value, reviewed_value, unit_standard, created_at, lab_reports!inner ( patient_id, uploaded_at )'
+        'parsed_value, reviewed_value, unit_standard, created_at, lab_reports!inner ( patient_id, uploaded_at, report_date )'
       )
       .eq('standard_key', standardKey)
       .eq('lab_reports.patient_id', patientId)
       .order('created_at', { ascending: true });
+
+    // A clinician's history is built only from reports shared with them.
+    if (req.user.role === 'clinician') {
+      const sharedIds = await reportIdsSharedWithClinician(req.user.id, patientId);
+      if (sharedIds.length === 0) return res.json([]);
+      query = query.in('lab_report_id', sharedIds);
+    }
+
+    const { data, error } = await query;
 
     if (error) throw error;
 
@@ -313,14 +370,31 @@ async function reviewMetric(req, res, next) {
   try {
     const { standardKey, reviewedValue } = req.validated;
 
+    const { data: metric, error: metricError } = await supabaseAdmin
+      .from('lab_report_metrics')
+      .select('id, lab_report_id, lab_reports ( patient_id )')
+      .eq('id', req.params.metricId)
+      .maybeSingle();
+
+    if (metricError) throw metricError;
+    if (!metric) return res.status(404).json({ error: 'Metric not found' });
+
+    const sharedIds = await reportIdsSharedWithClinician(req.user.id, metric.lab_reports?.patient_id);
+    if (!sharedIds.includes(metric.lab_report_id)) {
+      return res.status(403).json({ error: 'Not authorized for this report' });
+    }
+
+    const changes = {
+      reviewed_value: reviewedValue,
+      reviewed_by: req.user.id,
+      needs_review: false,
+    };
+    // Only overwrite the matched metric when the clinician chose one.
+    if (standardKey) changes.standard_key = standardKey;
+
     const { data, error } = await supabaseAdmin
       .from('lab_report_metrics')
-      .update({
-        standard_key: standardKey,
-        reviewed_value: reviewedValue,
-        reviewed_by: req.user.id,
-        needs_review: false,
-      })
+      .update(changes)
       .eq('id', req.params.metricId)
       .select()
       .single();
@@ -335,7 +409,7 @@ async function reviewMetric(req, res, next) {
 
 async function listTriageQueue(req, res, next) {
   try {
-    const data = await getTriageQueue();
+    const data = await getTriageQueue(req.user.id);
     res.json(data);
   } catch (err) {
     next(err);

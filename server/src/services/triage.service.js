@@ -29,9 +29,34 @@ async function maybeFlagReportForTriage({ labReport, metrics }) {
 }
 
 /**
- * The clinician-facing triage queue: reports/metrics still needing manual review.
+ * The clinician-facing triage queue: metrics still needing manual review, from
+ * reports the clinician's patients have shared with the clinician's visits.
  */
-async function getTriageQueue() {
+async function getTriageQueue(clinicianId) {
+  const { data: appointments, error: appointmentsError } = await supabaseAdmin
+    .from('appointments')
+    .select('id')
+    .eq('clinician_id', clinicianId);
+
+  if (appointmentsError) {
+    throw new Error(`Failed to load triage queue: ${appointmentsError.message}`);
+  }
+
+  const appointmentIds = (appointments || []).map((a) => a.id);
+  if (appointmentIds.length === 0) return [];
+
+  const { data: shares, error: sharesError } = await supabaseAdmin
+    .from('appointment_lab_reports')
+    .select('lab_report_id')
+    .in('appointment_id', appointmentIds);
+
+  if (sharesError) {
+    throw new Error(`Failed to load triage queue: ${sharesError.message}`);
+  }
+
+  const reportIds = [...new Set((shares || []).map((s) => s.lab_report_id))];
+  if (reportIds.length === 0) return [];
+
   const { data, error } = await supabaseAdmin
     .from('lab_report_metrics')
     .select(
@@ -42,6 +67,7 @@ async function getTriageQueue() {
     )
     .eq('needs_review', true)
     .is('reviewed_by', null)
+    .in('lab_report_id', reportIds)
     .order('created_at', { ascending: false });
 
   if (error) {
