@@ -2,6 +2,7 @@ const supabaseAdmin = require('../config/supabaseAdminClient');
 const { standardizeMetrics } = require('../services/standardization/standardizeLabReport.service');
 const { maybeFlagReportForTriage, getTriageQueue } = require('../services/triage.service');
 const { processDocument } = require('../services/ocrService');
+const { shareAllReportsWithAppointment } = require('../services/reportSharing.service');
 const {
   LAB_REPORTS_BUCKET,
   uploadFile,
@@ -183,6 +184,25 @@ async function shareReportWithAppointment(req, res, next) {
     if (error) throw error;
 
     res.status(200).json({ appointmentId, reportId, shared: true });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * Share the patient's whole report library with one of their appointments.
+ * Called when the pre-visit check-in starts, so the clinician can see reports
+ * uploaded before this visit was booked.
+ */
+async function shareAllReports(req, res, next) {
+  try {
+    const { appointmentId } = req.validated;
+
+    const access = await assertAppointmentForPatient(appointmentId, req.user.id, req.user);
+    if (!access.ok) return res.status(access.status).json({ error: access.error });
+
+    const shared = await shareAllReportsWithAppointment(req.user.id, appointmentId);
+    res.status(200).json({ appointmentId, shared });
   } catch (err) {
     next(err);
   }
@@ -428,6 +448,7 @@ module.exports = {
   reviewMetric,
   listTriageQueue,
   shareReportWithAppointment,
+  shareAllReports,
   unshareReportFromAppointment,
   deleteReport,
 };

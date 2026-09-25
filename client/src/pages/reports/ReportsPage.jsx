@@ -49,7 +49,7 @@ export default function ReportsPage() {
       const found = result?.metrics?.length ?? 0;
       showToast(
         found > 0
-          ? `Report added — ${found} value${found === 1 ? '' : 's'} read from it.`
+          ? `Report added — ${found} value${found === 1 ? '' : 's'} read from it. Tap Preview to check them.`
           : 'Report added. We could not read values automatically; your doctor will review it.',
         found > 0 ? 'success' : 'info'
       );

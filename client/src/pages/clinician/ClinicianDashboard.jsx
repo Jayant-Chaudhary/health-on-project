@@ -138,13 +138,14 @@ export function ClinicianDashboard() {
       if (!Number.isFinite(value)) throw new Error('Enter the reading as a number.');
 
       await resolveTriageAlert(alert.metricId, {
-        standardKey: alert.standardKey,
+        // Unmatched tests have no dictionary key; the server rejects an empty one.
+        ...(alert.standardKey && { standardKey: alert.standardKey }),
         reviewedValue: value,
       });
       patch((current) => ({
         triageAlerts: current.triageAlerts.filter((entry) => entry.id !== alert.id),
         metrics: current.metrics.map((metric) =>
-          metric.standardKey === alert.standardKey
+          metric.key === alert.metricKey
             ? { ...metric, value: String(value), needsReview: false }
             : metric
         ),
@@ -276,7 +277,7 @@ export function ClinicianDashboard() {
     if (!data) return null;
 
     return (
-      <div className="flex-1 flex flex-col min-h-0">
+      <div className="flex min-h-0 flex-1 flex-col">
         <div className="flex items-center gap-4 mb-4">
           <button onClick={close} aria-label="Back to dashboard" className="p-2 hover:bg-canvas-alt rounded-full transition-colors">
             <ArrowLeft className="w-5 h-5 text-ink-soft" />
@@ -317,13 +318,17 @@ export function ClinicianDashboard() {
   };
 
   return (
-    <div className="flex h-screen overflow-hidden bg-canvas">
+    // The frame never scrolls; only the two work columns do. overflow-clip,
+    // not overflow-hidden: a hidden box can still be scrolled by focus or
+    // scrollIntoView, which slid the whole shell (sidebar included) up and
+    // left a blank band at the bottom.
+    <div className="flex h-screen overflow-clip bg-canvas">
       <Sidebar collapsed={collapsed} onToggle={() => setCollapsed((value) => !value)} />
 
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <Topbar patients={todays} onSelectPatient={open} notifications={data?.notifications ?? []} />
 
-        <main className="flex min-h-0 flex-1 flex-col gap-4 px-6 py-5">{renderBody()}</main>
+        <main className="flex min-h-0 flex-1 flex-col gap-4 overflow-clip px-6 py-5">{renderBody()}</main>
       </div>
 
       <Link

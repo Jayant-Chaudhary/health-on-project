@@ -219,17 +219,23 @@ function buildPatient(appointment, patientId) {
   };
 }
 
-/** Latest value per standard_key, with the full series attached for charting. */
+/**
+ * Latest value per standard_key, with the full series attached for charting.
+ * Tests the dictionary does not know are grouped by their printed name, so a
+ * confident reading is never dropped just because it went unmatched.
+ */
 function buildMetrics(reports = []) {
   const byKey = new Map();
 
   for (const report of reports) {
     for (const metric of report.lab_report_metrics ?? []) {
-      if (!metric.standard_key) continue;
+      const key = metric.standard_key ?? `raw:${(metric.raw_key ?? '').trim().toLowerCase()}`;
 
       const value = metric.reviewed_value ?? metric.parsed_value;
-      const entry = byKey.get(metric.standard_key) ?? {
-        standardKey: metric.standard_key,
+      const entry = byKey.get(key) ?? {
+        key,
+        // Only dictionary metrics have a server-side trend to fetch.
+        standardKey: metric.standard_key ?? null,
         name: metric.metric_dictionary?.display_name ?? metric.raw_key,
         source: report.source_name ?? 'Lab report',
         unit: metric.unit_standard ?? metric.unit_raw ?? '',
@@ -238,23 +244,58 @@ function buildMetrics(reports = []) {
       };
 
       if (metric.needs_review) entry.needsReview = true;
+      // Qualitative results ("Negative", "Trace") have no number; show them as printed.
+      const takenAt = new Date(report.report_date ?? report.uploaded_at);
+      if (!entry.printedAt || takenAt >= entry.printedAt) {
+        entry.printedAt = takenAt;
+        entry.printed = metric.raw_value ?? null;
+      }
       // An unreadable value stays out of the series rather than charting as 0.
       if (value != null) {
         entry.history.push({ date: report.report_date ?? report.uploaded_at, value: Number(value) });
       }
-      byKey.set(metric.standard_key, entry);
+      byKey.set(key, entry);
     }
   }
 
-  return [...byKey.values()].map((entry) => {
+  return [...byKey.values()].map(({ printed, printedAt, ...entry }) => {
     entry.history.sort((a, b) => new Date(a.date) - new Date(b.date));
     const latest = entry.history.at(-1);
     return {
       ...entry,
-      value: latest?.value != null ? String(latest.value) : null,
-      recordedAt: latest?.date ?? null,
+      value: latest?.value != null ? String(latest.value) : printed,
+      recordedAt: latest?.date ?? printedAt?.toISOString() ?? null,
     };
   });
+}
+
+/** Mirrors OCR_CONFIDENCE_REVIEW_THRESHOLD on the server, for wording only. */
+const REVIEW_CONFIDENCE = 0.85;
+
+/**
+ * Why a value was sent to review, most specific cause first — the same
+ * checks the server's standardizer applies when it sets needs_review.
+ */
+function reviewReason(metric) {
+  const raw = String(metric.raw_value ?? '').trim();
+
+  if (/^\d+(\.\d+)?\s*[-–]\s*\d+(\.\d+)?$/.test(raw)) {
+    return `Read "${raw}", which looks like the reference range rather than the result.`;
+  }
+  if (/^[<>≤≥]/.test(raw)) {
+    return `Printed as a limit (${raw}), not an exact value.`;
+  }
+  if (metric.parsed_value == null) {
+    return raw ? `Could not read a number from "${raw}".` : 'No value was found next to this test.';
+  }
+  if (typeof metric.confidence_score === 'number' && metric.confidence_score < REVIEW_CONFIDENCE) {
+    return `OCR confidence is below ${Math.round(REVIEW_CONFIDENCE * 100)}%.`;
+  }
+  if (metric.standard_key && metric.unit_raw && metric.unit_standard) {
+    return `Unit "${metric.unit_raw}" could not be converted to ${metric.unit_standard}.`;
+  }
+  if (!metric.standard_key) return 'Test name did not match the metric dictionary.';
+  return 'Value could not be read confidently.';
 }
 
 /** Metrics the OCR pipeline flagged for human review. */
@@ -267,13 +308,13 @@ function buildTriageAlerts(reports = []) {
         labReportId: report.id,
         metricId: metric.id,
         standardKey: metric.standard_key ?? '',
+        // Same grouping key buildMetrics uses, so resolving updates the right row.
+        metricKey: metric.standard_key ?? `raw:${(metric.raw_key ?? '').trim().toLowerCase()}`,
         label: metric.metric_dictionary?.display_name ?? metric.raw_key,
         reportName: report.source_name ?? 'Uploaded lab report',
         reportDate: report.report_date ?? report.uploaded_at,
         confidence: metric.confidence_score ?? null,
-        reason: metric.standard_key
-          ? 'Value could not be read confidently.'
-          : 'Parameter name did not match the metric dictionary.',
+        reason: reviewReason(metric),
         imageUrl: report.signed_url ?? null,
       }))
   );

@@ -30,7 +30,7 @@ module.exports = {
     from: process.env.SMTP_FROM || 'no-reply@medbrief.app',
   },
   inviteTokenTtlHours: Number(process.env.INVITE_TOKEN_TTL_HOURS || 72),
-  ocrMetricReviewThreshold: Number(process.env.OCR_CONFIDENCE_REVIEW_THRESHOLD || 0.75),
+  ocrMetricReviewThreshold: Number(process.env.OCR_CONFIDENCE_REVIEW_THRESHOLD || 0.85),
   ocr: {
     // Extraction runs in the OCR service (PaddleOCRFastAPI) at ocrServiceUrl.
     // A multi-page scan on CPU takes ~10s a page, and uploads queue behind

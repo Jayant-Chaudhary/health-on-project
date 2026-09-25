@@ -17,6 +17,7 @@ const {
   reviewMetric,
   listTriageQueue,
   shareReportWithAppointment,
+  shareAllReports,
   unshareReportFromAppointment,
   deleteReport,
 } = require('../controllers/labReports.controller');
@@ -52,6 +53,7 @@ router.get('/trend/:standardKey', getMetricTrend);
 router.get('/triage/queue', roleGuard('clinician'), listTriageQueue);
 
 // Which of the patient's reports this appointment may see.
+router.post('/share-all', roleGuard('patient'), validateBody(shareReportSchema), shareAllReports);
 router.post('/:reportId/share', validateBody(shareReportSchema), shareReportWithAppointment);
 router.delete('/:reportId/share/:appointmentId', unshareReportFromAppointment);
 router.delete('/:reportId', deleteReport);

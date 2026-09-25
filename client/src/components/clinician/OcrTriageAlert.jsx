@@ -9,31 +9,54 @@ import { formatDate } from '../../utils/format.js';
  * Lists values the pipeline could not parse confidently and lets the clinician
  * type the correct reading in place — the one manual step that keeps a bad
  * scan from silently becoming a missing data point.
+ *
+ * The header toggles the list, so a long review queue can be folded away
+ * while the clinician works through the rest of the brief.
  */
 export function OcrTriageAlert({ alerts = [], onResolve }) {
+  const [expanded, setExpanded] = useState(true);
   if (alerts.length === 0) return null;
+
+  const listId = 'ocr-triage-list';
 
   return (
     <section className="rounded-2xl border border-terracotta-border bg-terracotta-surface p-4">
-      <div className="flex items-start gap-3">
+      <button
+        type="button"
+        onClick={() => setExpanded((open) => !open)}
+        aria-expanded={expanded}
+        aria-controls={listId}
+        className="flex w-full items-start gap-3 text-left"
+      >
         <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-terracotta text-white">
           <Icon name="scan" size={16} />
         </span>
-        <div className="min-w-0 flex-1">
-          <h2 className="font-display text-label-lg text-terracotta">
+        <span className="min-w-0 flex-1">
+          <span className="block font-display text-label-lg text-terracotta">
             {alerts.length} value{alerts.length > 1 ? 's' : ''} need{alerts.length > 1 ? '' : 's'} manual review
-          </h2>
-          <p className="text-body-sm text-terracotta-deep">
-            The OCR engine flagged these as low-confidence. Enter the reading from the scan to resolve.
-          </p>
+          </span>
+          <span className="block text-body-sm text-terracotta-deep">
+            {expanded
+              ? 'The OCR engine flagged these as low-confidence. Enter the reading from the scan to resolve.'
+              : 'Low-confidence OCR values. Expand to review.'}
+          </span>
+        </span>
+        <span className="flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-label-md text-terracotta hover:bg-surface/60">
+          {expanded ? 'Collapse' : 'Expand'}
+          <Icon
+            name="chevronDown"
+            size={16}
+            className={`transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`}
+          />
+        </span>
+      </button>
 
-          <ul className="mt-3 space-y-2">
-            {alerts.map((alert) => (
-              <AlertItem key={alert.id} alert={alert} onResolve={onResolve} />
-            ))}
-          </ul>
-        </div>
-      </div>
+      {/* Hidden rather than unmounted, so a half-typed correction survives a collapse. */}
+      <ul id={listId} hidden={!expanded} className="mt-3 space-y-2 sm:pl-11">
+        {alerts.map((alert) => (
+          <AlertItem key={alert.id} alert={alert} onResolve={onResolve} />
+        ))}
+      </ul>
     </section>
   );
 }

@@ -30,6 +30,11 @@ export const reportService = {
     });
   },
 
+  /** Share every report in the library with one appointment (on check-in start). */
+  async shareAllWithAppointment(appointmentId) {
+    return request('/api/lab-reports/share-all', { method: 'POST', body: { appointmentId } });
+  },
+
   async unshareFromAppointment(reportId, appointmentId) {
     return request(`/api/lab-reports/${reportId}/share/${appointmentId}`, { method: 'DELETE' });
   },

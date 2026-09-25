@@ -320,3 +320,63 @@ describe('Lab Reports API', () => {
     });
   });
 });
+
+describe('POST /lab-reports/share-all', () => {
+  const APPOINTMENT_ID = '11111111-1111-4111-8111-111111111111';
+  const patient = { id: 'patient-123', email: 'patient@example.com' };
+  const post = (body) => {
+    supabaseAdmin.auth.getUser.mockResolvedValue({ data: { user: patient }, error: null });
+    return request(app).post('/api/lab-reports/share-all').set('Authorization', 'Bearer t').send(body);
+  };
+
+  beforeEach(() => jest.clearAllMocks());
+
+  it("shares every report in the patient's library with their appointment", async () => {
+    const chains = mockTables(supabaseAdmin, {
+      profiles: profileRow('patient'),
+      appointments: ok({ id: APPOINTMENT_ID, patient_id: patient.id, clinician_id: 'dr-1' }),
+      lab_reports: ok([{ id: 'r1' }, { id: 'r2' }, { id: 'r3' }]),
+      appointment_lab_reports: ok(null),
+    });
+
+    const response = await post({ appointmentId: APPOINTMENT_ID });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ appointmentId: APPOINTMENT_ID, shared: 3 });
+    expect(chains.lab_reports[0].eq).toHaveBeenCalledWith('patient_id', patient.id);
+    expect(chains.appointment_lab_reports[0].upsert.mock.calls[0][0]).toHaveLength(3);
+  });
+
+  it('does nothing when the patient has no reports yet', async () => {
+    const chains = mockTables(supabaseAdmin, {
+      profiles: profileRow('patient'),
+      appointments: ok({ id: APPOINTMENT_ID, patient_id: patient.id, clinician_id: 'dr-1' }),
+      lab_reports: ok([]),
+    });
+
+    const response = await post({ appointmentId: APPOINTMENT_ID });
+
+    expect(response.status).toBe(200);
+    expect(response.body.shared).toBe(0);
+    expect(chains.appointment_lab_reports).toBeUndefined();
+  });
+
+  it("refuses another patient's appointment", async () => {
+    mockTables(supabaseAdmin, {
+      profiles: profileRow('patient'),
+      appointments: ok({ id: APPOINTMENT_ID, patient_id: 'someone-else', clinician_id: 'dr-1' }),
+    });
+
+    const response = await post({ appointmentId: APPOINTMENT_ID });
+
+    expect(response.status).toBe(403);
+  });
+
+  it('is patient-only', async () => {
+    mockTables(supabaseAdmin, { profiles: profileRow('clinician') });
+
+    const response = await post({ appointmentId: APPOINTMENT_ID });
+
+    expect(response.status).toBe(403);
+  });
+});

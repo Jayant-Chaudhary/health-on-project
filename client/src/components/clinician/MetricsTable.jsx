@@ -52,13 +52,11 @@ export function MetricsTable({ metrics = [], patientId }) {
           <tbody>
             {metrics.map((metric) => (
               <MetricRow
-                key={metric.standardKey}
+                key={metric.key}
                 metric={metric}
                 patientId={patientId}
-                expanded={expandedKey === metric.standardKey}
-                onToggle={() =>
-                  setExpandedKey((current) => (current === metric.standardKey ? null : metric.standardKey))
-                }
+                expanded={expandedKey === metric.key}
+                onToggle={() => setExpandedKey((current) => (current === metric.key ? null : metric.key))}
               />
             ))}
           </tbody>
